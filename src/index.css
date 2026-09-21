@@ -1,0 +1,258 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --color-teal-50: #eef2fa;
+  --color-teal-100: #dce4f4;
+  --color-teal-200: #b8c9ea;
+  --color-teal-300: #88a5dc;
+  --color-teal-400: #557ec9;
+  --color-teal-500: #2b56ad;
+  --color-teal-600: #0c1d5c;
+  --color-teal-700: #091647;
+  --color-teal-800: #060f33;
+  --color-teal-900: #040920;
+  --color-teal-950: #020512;
+
+  --color-brand-blue: #0c1d5c;
+}
+
+@layer base {
+  body {
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  }
+}
+
+/* Dark mode overrides for common components and inputs */
+.dark body {
+  background-color: #0b1329;
+  color: #f1f5f9;
+}
+
+.dark .bg-slate-50 {
+  background-color: #0f172a;
+}
+
+.dark .bg-slate-100 {
+  background-color: #1e293b;
+}
+
+.dark .bg-white:not(.aso-sheet, .aso-sheet *) {
+  background-color: #111c38;
+}
+
+.dark .border-slate-200,
+.dark .border-slate-200\/80 {
+  border-color: #1e293b;
+}
+
+.dark .border-slate-300 {
+  border-color: #334155;
+}
+
+.dark .text-slate-900,
+.dark .text-slate-800 {
+  color: #f8fafc;
+}
+
+.dark .text-slate-700,
+.dark .text-slate-600 {
+  color: #cbd5e1;
+}
+
+.dark .text-slate-500,
+.dark .text-slate-400 {
+  color: #94a3b8;
+}
+
+.dark input:not(.aso-sheet input),
+.dark select:not(.aso-sheet select),
+.dark textarea:not(.aso-sheet textarea) {
+  background-color: #1e293b;
+  color: #f8fafc;
+  border-color: #334155;
+}
+
+.dark input:focus:not(.aso-sheet input),
+.dark select:focus:not(.aso-sheet select),
+.dark textarea:focus:not(.aso-sheet textarea) {
+  border-color: #557ec9;
+}
+
+/* Screen styles for timbrado sheet */
+.aso-sheet.with-timbrado {
+  position: relative;
+  background-color: #ffffff;
+  border: 1px solid #cbd5e1;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+}
+
+.timbrado-layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  user-select: none;
+  z-index: 0;
+}
+
+.timbrado-layer img {
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+  display: block;
+}
+
+.aso-sheet-content {
+  position: relative;
+  z-index: 10;
+}
+
+/* Ocultar badge/drawer do Netlify na interface e evitar sobreposição */
+#netlify-drawer,
+[data-netlify-badge],
+iframe[src*="netlify"],
+iframe[title*="Netlify" i] {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+@page {
+  size: A4 portrait;
+  margin: 0;
+}
+
+@media print {
+  /* Ensure backgrounds and images are printed with exact colors */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Hide all UI elements marked with no-print, third-party badges (Netlify), navigation */
+  .no-print,
+  nav,
+  header.app-header,
+  .btn-print,
+  aside,
+  button:not(.allow-print),
+  iframe,
+  #netlify-drawer,
+  [data-netlify-badge],
+  div[id*="netlify"],
+  div[class*="netlify"] {
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+    width: 0 !important;
+    height: 0 !important;
+  }
+
+  /* Reset body and document for full A4 printing */
+  html, body {
+    background: white !important;
+    color: black !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    font-size: 9.5pt !important;
+    line-height: 1.25 !important;
+    width: 210mm !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  .print-container {
+    width: 210mm !important;
+    max-width: 210mm !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+    border: none !important;
+    background: transparent !important;
+  }
+
+  .aso-print-wrapper {
+    margin: 0 !important;
+    padding: 0 !important;
+    page-break-after: always !important;
+    break-after: page !important;
+  }
+
+  .aso-print-wrapper:last-child {
+    page-break-after: auto !important;
+    break-after: auto !important;
+  }
+
+  .aso-sheet, .annex-sheet {
+    position: relative !important;
+    page-break-after: always !important;
+    break-after: page !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    box-shadow: none !important;
+    margin: 0 auto !important;
+    box-sizing: border-box !important;
+    width: 210mm !important;
+    height: 297mm !important;
+    max-height: 297mm !important;
+    overflow: hidden !important;
+    background: white !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  .aso-sheet.with-timbrado, .annex-sheet.with-timbrado {
+    border: none !important;
+    padding: 28mm 10mm 15mm 10mm !important;
+  }
+
+  .aso-sheet:not(.with-timbrado), .annex-sheet:not(.with-timbrado) {
+    border: 1.5px solid #111827 !important;
+    padding: 10mm 10mm 10mm 10mm !important;
+  }
+
+  .signatures-section {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  .timbrado-layer {
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    width: 210mm !important;
+    height: 297mm !important;
+    z-index: 0 !important;
+    display: block !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  .timbrado-layer img {
+    width: 210mm !important;
+    height: 297mm !important;
+    object-fit: fill !important;
+    display: block !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  .aso-sheet-content {
+    position: relative !important;
+    z-index: 10 !important;
+  }
+
+  .aso-sheet:last-child,
+  .annex-sheet:last-child,
+  .aso-print-wrapper:last-child .aso-sheet,
+  .aso-print-wrapper:last-child .annex-sheet {
+    page-break-after: auto !important;
+    break-after: auto !important;
+  }
+}

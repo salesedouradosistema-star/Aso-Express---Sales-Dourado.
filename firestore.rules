@@ -1,0 +1,51 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isMasterAdmin() {
+      return isSignedIn() && request.auth.token.email.lower() == 'salesedouradosistema@gmail.com';
+    }
+
+    // Health check / Connection test document
+    match /test/{testId} {
+      allow read, write: if true;
+    }
+
+    // Controle de Permissões de Acesso:
+    // Apenas o e-mail Master (salesedouradosistema@gmail.com) pode cadastrar, alterar e remover permissões!
+    // Usuários autenticados podem ler para checagem de autorização.
+    match /authorized_users/{userEmailId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isMasterAdmin();
+    }
+
+    // Empresas cadastradas
+    match /companies/{companyId} {
+      allow read, write: if isSignedIn();
+    }
+
+    // Médicos cadastrados
+    match /doctors/{doctorId} {
+      allow read, write: if isSignedIn();
+    }
+
+    // Modelos de Cargos e Funções
+    match /job_roles/{roleId} {
+      allow read, write: if isSignedIn();
+    }
+
+    // Registros de ASOs emitidos
+    match /aso_records/{asoId} {
+      allow read, write: if isSignedIn();
+    }
+
+    // Configurações globais do sistema
+    match /settings/{settingId} {
+      allow read, write: if isSignedIn();
+    }
+  }
+}
+

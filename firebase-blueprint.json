@@ -1,0 +1,125 @@
+{
+  "entities": {
+    "company": {
+      "title": "Company",
+      "description": "Cadastros de empresas tomadoras ou clientes para emissão de ASO (NR-7)",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Identificador único da empresa" },
+        "name": { "type": "string", "description": "Razão Social" },
+        "fantasyName": { "type": "string", "description": "Nome Fantasia" },
+        "cnpj": { "type": "string", "description": "CNPJ da empresa" },
+        "address": { "type": "string", "description": "Endereço completo" },
+        "responsible": { "type": "string", "description": "Nome do responsável ou contato" },
+        "cnae": { "type": "string", "description": "Código CNAE" },
+        "riskGrade": { "type": "string", "description": "Grau de risco NR-4 (1 a 4, indeterminado, em_branco)" },
+        "phone": { "type": "string", "description": "Telefone de contato" },
+        "email": { "type": "string", "description": "E-mail comercial" }
+      },
+      "required": ["id", "name", "cnpj", "address", "responsible"]
+    },
+    "doctor": {
+      "title": "Doctor",
+      "description": "Médicos examinadores e coordenadores do PCMSO",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Identificador único do médico" },
+        "name": { "type": "string", "description": "Nome completo do médico" },
+        "crm": { "type": "string", "description": "Número de registro no CRM" },
+        "crmUf": { "type": "string", "description": "UF do CRM" },
+        "specialty": { "type": "string", "description": "Especialidade médica" },
+        "rqe": { "type": "string", "description": "Registro de Qualificação de Especialista" },
+        "phone": { "type": "string", "description": "Telefone profissional" },
+        "email": { "type": "string", "description": "E-mail profissional" },
+        "isCoordinator": { "type": "boolean", "description": "Indica se atua como médico coordenador" }
+      },
+      "required": ["id", "name", "crm", "crmUf", "specialty"]
+    },
+    "job_role_template": {
+      "title": "JobRoleTemplate",
+      "description": "Modelo parametrizado de cargo ou função com riscos ocupacionais e questionário clínico",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Identificador do cargo" },
+        "name": { "type": "string", "description": "Nome da função / cargo" },
+        "department": { "type": "string", "description": "Setor padrão sugerido" },
+        "cbo": { "type": "string", "description": "Código CBO" },
+        "description": { "type": "string", "description": "Descrição sumária de atividades" },
+        "createdAt": { "type": "string", "description": "Data de criação em formato ISO" },
+        "updatedAt": { "type": "string", "description": "Data de atualização em formato ISO" }
+      },
+      "required": ["id", "name"]
+    },
+    "aso_record": {
+      "title": "ASORecord",
+      "description": "Registro oficial de Atestado de Saúde Ocupacional emitido",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Identificador do registro ASO" },
+        "asoCode": { "type": "string", "description": "Código/Número do ASO" },
+        "issueDate": { "type": "string", "description": "Data de emissão (YYYY-MM-DD)" },
+        "issueCity": { "type": "string", "description": "Cidade de emissão" },
+        "examType": { "type": "string", "description": "Tipo do exame ocupacional" },
+        "fitness": { "type": "string", "description": "Parecer de aptidão (apto, inapto, etc)" },
+        "restrictionsNote": { "type": "string", "description": "Observações de restrições caso apto com restrições" },
+        "notes": { "type": "string", "description": "Observações gerais" },
+        "createdAt": { "type": "string", "description": "Timestamp de emissão" }
+      },
+      "required": ["id", "asoCode", "issueDate", "examType", "fitness", "createdAt"]
+    },
+    "clinic_settings": {
+      "title": "ClinicSettings",
+      "description": "Configurações gerais da clínica (papel timbrado, cidade padrão, etc)",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "ID da configuração (ex: general)" },
+        "defaultCity": { "type": "string", "description": "Cidade padrão de emissão" },
+        "activeCompanyId": { "type": "string", "description": "ID da empresa ativa selecionada" },
+        "activeDoctorId": { "type": "string", "description": "ID do médico ativo selecionado" },
+        "timbrado": { "type": "object", "description": "Configuração do papel timbrado" }
+      },
+      "required": ["id"]
+    },
+    "authorized_user": {
+      "title": "AuthorizedUser",
+      "description": "Lista de e-mails autorizados a acessar o sistema ASO Express",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "ID do registro (e-mail normalizado ou uuid)" },
+        "email": { "type": "string", "description": "Endereço de e-mail autorizado" },
+        "name": { "type": "string", "description": "Nome da pessoa autorizada" },
+        "role": { "type": "string", "description": "Nível de acesso (admin ou user)" },
+        "addedBy": { "type": "string", "description": "E-mail de quem concedeu o acesso" },
+        "addedAt": { "type": "string", "description": "Data de autorização ISO" },
+        "notes": { "type": "string", "description": "Observações adicionais" }
+      },
+      "required": ["id", "email", "addedAt"]
+    }
+  },
+  "firestore": {
+    "/companies/{companyId}": {
+      "schema": "company",
+      "description": "Coleção de empresas cadastradas no sistema"
+    },
+    "/doctors/{doctorId}": {
+      "schema": "doctor",
+      "description": "Coleção de médicos examinadores cadastrados no sistema"
+    },
+    "/job_roles/{roleId}": {
+      "schema": "job_role_template",
+      "description": "Coleção de modelos de cargos com riscos e perguntas clínicas parametrizadas"
+    },
+    "/aso_records/{asoId}": {
+      "schema": "aso_record",
+      "description": "Histórico de ASOs emitidos"
+    },
+    "/settings/{settingId}": {
+      "schema": "clinic_settings",
+      "description": "Configurações gerais e preferências do sistema"
+    },
+    "/authorized_users/{userEmailId}": {
+      "schema": "authorized_user",
+      "description": "E-mails com permissão de acesso ao sistema gerenciados exclusivamente pelo administrador master"
+    }
+  }
+}

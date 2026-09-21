@@ -1,0 +1,8 @@
+{
+  "name": "ASO Express - Sales \u0026 Dourado",
+  "description": "Sistema ágil para atendimento clínico in loco e emissão de Atestado de Saúde Ocupacional (NR-7) com pré-salvamento de empresa e médico examinador.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

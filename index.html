@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="pt-BR" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script>
+      (function() {
+        try {
+          var saved = localStorage.getItem('aso_theme');
+          if (saved === 'light') {
+            document.documentElement.classList.remove('dark');
+          } else {
+            document.documentElement.classList.add('dark');
+          }
+        } catch(e) {}
+      })();
+    </script>
+    <title>ASO Express - Sales & Dourado</title>
+    <meta name="description" content="Sistema ágil para atendimento clínico in loco e emissão de Atestado de Saúde Ocupacional (NR-7) com pré-salvamento de empresa e médico examinador." />
+    <meta property="og:title" content="ASO Express - Sales & Dourado" />
+    <meta property="og:description" content="Sistema ágil para atendimento clínico in loco e emissão de Atestado de Saúde Ocupacional (NR-7) com pré-salvamento de empresa e médico examinador." />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary_large_image" />
+
+    <!-- Intercept and handle sandbox cross-origin SecurityErrors before any subresources load -->
+    <script>
+      (function() {
+        function isCrossOriginSecurityError(msg, err) {
+          try {
+            var fullText = (
+              String(msg || '') + ' ' +
+              String((err && err.message) || '') + ' ' +
+              String((err && err.name) || '') + ' ' +
+              String(err || '')
+            ).toLowerCase();
+            return (
+              fullText.indexOf('blocked a frame with origin') !== -1 ||
+              fullText.indexOf('cross-origin frame') !== -1 ||
+              fullText.indexOf('securityerror') !== -1 ||
+              (err && err.name === 'SecurityError')
+            );
+          } catch (e) {
+            return false;
+          }
+        }
+
+        var prevOnError = window.onerror;
+        window.onerror = function(message, source, lineno, colno, error) {
+          if (isCrossOriginSecurityError(message, error)) {
+            console.warn('Cross-origin frame security error intercepted via window.onerror:', message);
+            return true; // Marks error as handled to prevent uncaught exception bubbling
+          }
+          if (typeof prevOnError === 'function') {
+            return prevOnError.apply(this, arguments);
+          }
+          return false;
+        };
+
+        window.addEventListener('error', function(event) {
+          var msg = (event && event.message) || (event && event.error && event.error.message) || '';
+          if (isCrossOriginSecurityError(msg, event && event.error)) {
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            console.warn('Cross-origin frame error intercepted (error listener):', msg);
+            return true;
+          }
+        }, true);
+
+        window.addEventListener('unhandledrejection', function(event) {
+          var reason = event && event.reason;
+          var msg = typeof reason === 'string' ? reason : (reason && (reason.message || reason.name)) || '';
+          if (isCrossOriginSecurityError(msg, reason)) {
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            console.warn('Cross-origin frame rejection intercepted (unhandledrejection):', msg);
+            return true;
+          }
+        }, true);
+      })();
+    </script>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  </head>
+  <body class="bg-slate-50 text-slate-900 antialiased selection:bg-teal-100 selection:text-teal-900">
+    <div id="root"></div>
+    <script>
+      // Ocultar e remover automaticamente badges/iframes injetados por provedores de hospedagem (Netlify)
+      (function() {
+        function cleanupInjectedBadges() {
+          try {
+            var iframes = document.querySelectorAll('iframe');
+            iframes.forEach(function(el) {
+              var src = (el.src || '').toLowerCase();
+              var title = (el.title || '').toLowerCase();
+              var id = (el.id || '').toLowerCase();
+              if (src.includes('netlify') || title.includes('netlify') || id.includes('netlify')) {
+                el.style.setProperty('display', 'none', 'important');
+                el.style.setProperty('visibility', 'hidden', 'important');
+                el.remove();
+              }
+            });
+            var drawer = document.getElementById('netlify-drawer');
+            if (drawer) drawer.remove();
+            var netlifyBadges = document.querySelectorAll('[data-netlify-badge], [class*="netlify-badge"], [id*="netlify-badge"]');
+            netlifyBadges.forEach(function(el) {
+              el.remove();
+            });
+          } catch(e) {}
+        }
+        document.addEventListener('DOMContentLoaded', cleanupInjectedBadges);
+        window.addEventListener('load', cleanupInjectedBadges);
+        setInterval(cleanupInjectedBadges, 1500);
+      })();
+    </script>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+
