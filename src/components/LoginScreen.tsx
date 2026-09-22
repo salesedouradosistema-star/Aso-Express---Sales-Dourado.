@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   Shield,
   Lock,
@@ -11,29 +11,23 @@ import {
   Eye,
   EyeOff,
   LogIn,
-  ExternalLink,
-  Crown,
 } from 'lucide-react';
 import {
   loginWithGoogle,
   loginWithGoogleRedirect,
-  loginWithGoogleCredential,
   loginWithCredentials,
-  isAppInIframe,
 } from '../services/firebase';
-import firebaseConfig from '../../firebase-applet-config.json';
-import { MASTER_ADMIN_EMAIL } from '../types';
 
 interface LoginScreenProps {
   onLoginSuccess?: () => void;
 }
 
 export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
-  // Tabs: 'credentials' (Login direto com senha) or 'google'
+  // Tabs: 'credentials' (Login direto com senha - padrão recomendado) or 'google'
   const [activeTab, setActiveTab] = useState<'credentials' | 'google'>('credentials');
 
   // Credentials form state
-  const [identifier, setIdentifier] = useState('');
+  const [identifier, setIdentifier] = useState('salesedourado');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isCredentialLoading, setIsCredentialLoading] = useState(false);
@@ -44,65 +38,6 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
   const [showRedirectOption, setShowRedirectOption] = useState<boolean>(false);
 
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-
-  const inIframe = isAppInIframe();
-
-  // Initialize Google Identity Services (GIS) if available
-  useEffect(() => {
-    if (activeTab !== 'google') return;
-
-    let attempts = 0;
-    const interval = setInterval(() => {
-      attempts++;
-      const google = (window as any).google;
-      if (google?.accounts?.id && firebaseConfig.oAuthClientId) {
-        clearInterval(interval);
-        try {
-          google.accounts.id.initialize({
-            client_id: firebaseConfig.oAuthClientId,
-            callback: async (response: any) => {
-              if (response?.credential) {
-                setIsGoogleLoading(true);
-                setErrorMessage(null);
-                try {
-                  await loginWithGoogleCredential(response.credential);
-                  if (onLoginSuccess) {
-                    onLoginSuccess();
-                  }
-                } catch (err: any) {
-                  console.error('[GIS] Erro no login via credencial Google:', err);
-                  setErrorMessage(err?.message || 'Falha ao autenticar credencial do Google.');
-                } finally {
-                  setIsGoogleLoading(false);
-                }
-              }
-            },
-            auto_select: false,
-            cancel_on_tap_outside: true,
-          });
-
-          const container = document.getElementById('google-gsi-button-container');
-          if (container) {
-            container.innerHTML = '';
-            google.accounts.id.renderButton(container, {
-              theme: 'outline',
-              size: 'large',
-              width: Math.min(container.clientWidth || 320, 360),
-              text: 'signin_with',
-              shape: 'rectangular',
-              locale: 'pt-BR',
-            });
-          }
-        } catch (e) {
-          console.warn('[GIS] Erro ao configurar Google Identity Services:', e);
-        }
-      } else if (attempts > 15) {
-        clearInterval(interval);
-      }
-    }, 300);
-
-    return () => clearInterval(interval);
-  }, [activeTab]);
 
   const handleCredentialLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -120,7 +55,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
         onLoginSuccess();
       }
     } catch (error: any) {
-      console.error('[Auth] Erro no login direto:', error);
+      console.warn('[Auth] Erro no login direto:', error?.message || error);
       setErrorMessage(error?.message || 'Falha ao autenticar. Verifique usuário e senha.');
     } finally {
       setIsCredentialLoading(false);
@@ -138,25 +73,27 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
         onLoginSuccess();
       }
     } catch (error: any) {
-      console.error('[Auth] Erro no login Google:', error);
       setShowRedirectOption(true);
 
-      if (error?.code === 'auth/popup-closed-by-user') {
+      if (error?.code === 'auth/popup-closed-by-user' || error?.code === 'auth/cancelled-popup-request') {
+        console.warn('[Auth] Janela popup do Google foi fechada antes de concluir.');
         setErrorMessage(
-          'A janela de autenticação do Google foi fechada antes de concluir (comum ao rodar dentro de pré-visualizações integradas). Para autenticar com a Conta Google sem travamento, clique em "Abrir Sistema em Nova Aba" ou utilize o Login com Senha.'
-        );
-      } else if (error?.code === 'auth/popup-blocked') {
-        setErrorMessage(
-          'O navegador bloqueou a abertura do popup do Google. Clique em "Abrir Sistema em Nova Aba" ou utilize o Login com Senha.'
-        );
-      } else if (error?.code === 'auth/cancelled-popup-request') {
-        // Ignored
-      } else if (error?.code === 'auth/unauthorized-domain') {
-        setErrorMessage(
-          `O domínio atual (${window.location.hostname}) precisa ser adicionado na lista de Domínios Autorizados no Firebase Console.`
+          'A janela de autenticação do Google foi fechada antes de concluir (comum em navegadores rodando dentro de visualizações integradas). Utilize a aba "Login com Senha" para entrar diretamente.'
         );
       } else {
-        setErrorMessage(error?.message || 'Falha ao autenticar com o Google. Tente novamente.');
+        console.warn('[Auth] Erro no login Google:', error?.message || error?.code || error);
+        const errStr = String(error?.message || '') + ' ' + String(error?.code || '');
+        if (errStr.includes('origin_mismatch') || error?.code === 'auth/unauthorized-domain') {
+          setErrorMessage(
+            'O domínio da nuvem ainda não está autorizado na lista de origens do Google Cloud Console (Erro 400: origin_mismatch). Utilize a aba "Login com Senha" para acessar imediatamente sem depender do Google OAuth.'
+          );
+        } else if (error?.code === 'auth/popup-blocked') {
+          setErrorMessage(
+            'O navegador bloqueou a abertura do popup do Google. Utilize a aba "Login com Senha" para entrar sem bloqueios.'
+          );
+        } else {
+          setErrorMessage(error?.message || 'Falha ao autenticar com o Google. Recomendamos usar o Login com Senha.');
+        }
       }
     } finally {
       setIsGoogleLoading(false);
@@ -169,17 +106,9 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
     try {
       await loginWithGoogleRedirect();
     } catch (err: any) {
-      console.error('[Auth] Erro ao redirecionar para Google:', err);
+      console.warn('[Auth] Erro ao redirecionar para Google:', err?.message || err);
       setErrorMessage(err?.message || 'Falha ao iniciar redirecionamento do Google.');
       setIsRedirecting(false);
-    }
-  };
-
-  const openInNewTab = () => {
-    try {
-      window.open(window.location.href, '_blank');
-    } catch {
-      window.location.reload();
     }
   };
 
@@ -194,12 +123,12 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
         {/* Card Container */}
         <div className="bg-white rounded-2xl shadow-2xl border border-slate-200/80 p-7 sm:p-9">
           {/* Brand Header */}
-          <div className="text-center mb-6">
-            <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl overflow-hidden bg-white border border-slate-200 text-white shadow-lg shadow-teal-700/20 mb-3.5 ring-4 ring-teal-50 relative">
+          <div className="text-center mb-6 flex flex-col items-center">
+            <div className="flex items-center justify-center w-16 h-16 rounded-2xl overflow-hidden bg-white border border-slate-200 text-white shadow-lg shadow-teal-700/20 mb-3.5 ring-4 ring-teal-50 relative mx-auto">
               <img
                 src="/logo-express.jpg"
                 alt="Logo Sales e Dourado"
-                className="w-full h-full object-cover"
+                className="w-full h-full object-contain p-1"
                 referrerPolicy="no-referrer"
                 onError={(e) => {
                   const target = e.currentTarget;
@@ -238,14 +167,14 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
                 setActiveTab('credentials');
                 setErrorMessage(null);
               }}
-              className={`flex-1 py-2 rounded-lg flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+              className={`flex-1 py-2.5 px-3 rounded-lg flex items-center justify-center gap-2 transition-all cursor-pointer ${
                 activeTab === 'credentials'
                   ? 'bg-white text-teal-800 shadow-xs'
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              <Key className="w-3.5 h-3.5 text-teal-600" />
-              <span>Login com Senha</span>
+              <Key className="w-3.5 h-3.5 text-teal-600 shrink-0" />
+              <span className="whitespace-nowrap">Login</span>
             </button>
             <button
               type="button"
@@ -253,13 +182,13 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
                 setActiveTab('google');
                 setErrorMessage(null);
               }}
-              className={`flex-1 py-2 rounded-lg flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+              className={`flex-1 py-2.5 px-3 rounded-lg flex items-center justify-center gap-2 transition-all cursor-pointer ${
                 activeTab === 'google'
                   ? 'bg-white text-slate-900 shadow-xs'
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24">
+              <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24">
                 <path
                   fill="#4285F4"
                   d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.66-5.17 3.66-9.17z"
@@ -277,11 +206,11 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
                   d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.33 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z"
                 />
               </svg>
-              <span>Conta Google</span>
+              <span className="whitespace-nowrap">Conta Google</span>
             </button>
           </div>
 
-          {/* Error Feedback */}
+          {/* Feedback Alerts */}
           {errorMessage && (
             <div className="mb-4 p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs flex items-start gap-2.5 animate-fadeIn">
               <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-red-600" />
@@ -292,28 +221,6 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
           {/* TAB 1: Password / Credentials Login */}
           {activeTab === 'credentials' && (
             <form onSubmit={handleCredentialLogin} className="space-y-3.5">
-              {/* Admin Quick Assistance Box */}
-              <div className="bg-amber-50/90 border border-amber-200 rounded-xl p-3 text-xs text-amber-900 flex items-start gap-2.5">
-                <Crown className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                <div className="space-y-1 w-full">
-                  <div className="font-bold text-amber-950 flex items-center justify-between">
-                    <span>Acesso da Administração (Sales e Dourado)</span>
-                    {identifier !== MASTER_ADMIN_EMAIL && identifier !== 'salesedourado' && (
-                      <button
-                        type="button"
-                        onClick={() => setIdentifier('salesedourado')}
-                        className="text-[10px] font-semibold text-teal-700 hover:underline cursor-pointer"
-                      >
-                        Preencher
-                      </button>
-                    )}
-                  </div>
-                  <p className="text-[11px] leading-relaxed text-amber-900/90">
-                    Digite <strong>salesedourado</strong> ou <strong>{MASTER_ADMIN_EMAIL}</strong>. No primeiro acesso com senha, informe a senha que deseja utilizar e entre imediatamente.
-                  </p>
-                </div>
-              </div>
-
               <div>
                 <label className="block text-[11px] font-semibold text-slate-700 mb-1">
                   E-mail ou Usuário de Acesso
@@ -376,7 +283,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
 
               <div className="text-center pt-1">
                 <span className="text-[11px] text-slate-500">
-                  Usuários padrão devem utilizar o login e senha cadastrados pelo Administrador.
+                  Acesso seguro direto por senha, livre de restrições de popup ou OAuth do navegador.
                 </span>
               </div>
             </form>
@@ -385,31 +292,6 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
           {/* TAB 2: Google Authentication */}
           {activeTab === 'google' && (
             <div className="space-y-3.5">
-              {/* If in iframe: show warning and Open in New Tab action */}
-              {inIframe && (
-                <div className="bg-blue-50/90 border border-blue-200 rounded-xl p-3.5 text-xs text-blue-900 space-y-2.5">
-                  <div className="flex items-start gap-2">
-                    <ExternalLink className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
-                    <div>
-                      <span className="font-bold text-blue-950 block mb-0.5">
-                        Visualização Integrada (Iframe)
-                      </span>
-                      <p className="text-[11px] leading-relaxed text-blue-900/90">
-                        O navegador bloqueia janelas de autenticação do Google abertas dentro de iframes (fazendo-as carregar infinitamente ou fechar).
-                      </p>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={openInNewTab}
-                    className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs transition-colors cursor-pointer shadow-xs"
-                  >
-                    <ExternalLink className="w-3.5 h-3.5" />
-                    <span>Abrir Sistema em Nova Aba (Recomendado para Google)</span>
-                  </button>
-                </div>
-              )}
-
               <div className="bg-slate-50 border border-slate-200/70 rounded-xl p-3 text-xs text-slate-600 flex items-start gap-2">
                 <Lock className="w-4 h-4 text-teal-600 shrink-0 mt-0.5" />
                 <div>
@@ -419,9 +301,6 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
                   Faça login com seu Gmail ou conta Google Workspace autorizada no sistema.
                 </div>
               </div>
-
-              {/* Google Identity Services button container (if supported by browser) */}
-              <div id="google-gsi-button-container" className="flex justify-center min-h-[40px] empty:hidden" />
 
               {/* Standard Google Login Button */}
               <button
@@ -482,10 +361,17 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
                 </button>
               )}
 
-              <div className="text-center pt-1">
-                <span className="text-[11px] text-slate-500">
-                  Dica: Se a janela do Google fechar ou travar, use o botão "Abrir em Nova Aba" ou a aba "Login com Senha".
-                </span>
+              <div className="text-center pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveTab('credentials');
+                    setErrorMessage(null);
+                  }}
+                  className="text-xs text-teal-700 hover:text-teal-800 font-semibold underline cursor-pointer"
+                >
+                  Prefere entrar direto? Use o Login com Senha
+                </button>
               </div>
             </div>
           )}

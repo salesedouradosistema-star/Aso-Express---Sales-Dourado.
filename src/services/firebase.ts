@@ -781,4 +781,34 @@ export function isUserAdmin(
   return isMasterAdminEmail(email);
 }
 
+export async function resetMasterAdminPassword(newPassword: string): Promise<AppUserSession> {
+  if (!newPassword || newPassword.trim().length < 4) {
+    throw new Error('A senha deve ter no mínimo 4 caracteres.');
+  }
+  const masterDocId = toEmailDocId(MASTER_ADMIN_EMAIL);
+  const masterUser: AuthorizedUser = {
+    id: masterDocId,
+    email: MASTER_ADMIN_EMAIL,
+    name: 'Sales e Dourado',
+    role: 'admin',
+    password: newPassword.trim(),
+    authProvider: 'password',
+    addedBy: MASTER_ADMIN_EMAIL,
+    addedAt: new Date().toISOString(),
+    notes: 'Administrador Master do Sistema',
+  };
+  await setDoc(doc(db, 'authorized_users', masterDocId), masterUser, { merge: true });
+
+  const session: AppUserSession = {
+    uid: masterDocId,
+    email: MASTER_ADMIN_EMAIL,
+    displayName: 'Sales e Dourado',
+    role: 'admin',
+    authProvider: 'password',
+  };
+  saveCustomSession(session);
+  notifyAuthListeners(session);
+  return session;
+}
+
 
