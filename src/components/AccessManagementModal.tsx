@@ -23,6 +23,8 @@ import {
   removeAuthorizedUser,
   updateUserPassword,
   normalizeEmail,
+  toEmailDocId,
+  isMasterAdminEmail,
 } from '../services/firebase';
 import { AuthorizedUser, MASTER_ADMIN_EMAIL } from '../types';
 
@@ -256,7 +258,7 @@ export const AccessManagementModal: React.FC<AccessManagementModalProps> = ({
         {/* Content Body */}
         <div className="p-6 overflow-y-auto space-y-6 flex-1 text-slate-800 dark:text-slate-200">
           {/* Master Admin Card */}
-          <div className="p-3.5 rounded-xl bg-gradient-to-r from-amber-50 to-orange-50/50 dark:from-amber-950/30 dark:to-orange-950/20 border border-amber-200/80 dark:border-amber-800/50 flex items-center justify-between">
+          <div className="p-3.5 rounded-xl bg-gradient-to-r from-amber-50 to-orange-50/50 dark:from-amber-950/30 dark:to-orange-950/20 border border-amber-200/80 dark:border-amber-800/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="flex items-center gap-3">
               <div className="w-9 h-9 rounded-lg bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-xs">
                 <Crown className="w-5 h-5" />
@@ -271,10 +273,30 @@ export const AccessManagementModal: React.FC<AccessManagementModalProps> = ({
                   </span>
                 </div>
                 <div className="text-[11px] text-amber-900/80 dark:text-amber-400/80 mt-0.5">
-                  Conta administradora exclusiva com acesso irrestrito ao sistema e controle de permissões. Todas as demais contas operam como Usuário Padrão.
+                  Conta administradora exclusiva. Permite acesso via Conta Google ou Senha Direta com o usuário <strong>salesedourado</strong>.
                 </div>
               </div>
             </div>
+            <button
+              type="button"
+              onClick={() => {
+                const masterUser = usersList.find((u) => isMasterAdminEmail(u.email)) || {
+                  id: toEmailDocId(MASTER_ADMIN_EMAIL),
+                  email: MASTER_ADMIN_EMAIL,
+                  name: 'Sales e Dourado',
+                  role: 'admin',
+                  addedBy: MASTER_ADMIN_EMAIL,
+                  addedAt: new Date().toISOString(),
+                };
+                setEditingPasswordUser(masterUser);
+                setUpdatedPasswordValue('');
+                setErrorMessage(null);
+              }}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white dark:bg-slate-800 border border-amber-300 dark:border-amber-700 text-amber-900 dark:text-amber-300 text-xs font-semibold hover:bg-amber-100/50 transition-colors cursor-pointer shrink-0 shadow-2xs"
+            >
+              <Key className="w-3.5 h-3.5 text-amber-600" />
+              <span>Alterar / Definir Senha</span>
+            </button>
           </div>
 
           {/* Feedback Alerts */}

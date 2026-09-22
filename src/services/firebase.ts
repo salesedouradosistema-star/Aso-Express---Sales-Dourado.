@@ -4,6 +4,7 @@ import {
   GoogleAuthProvider,
   signInWithPopup,
   signInWithRedirect,
+  signInWithCredential,
   getRedirectResult,
   setPersistence,
   browserLocalPersistence,
@@ -85,6 +86,17 @@ export function isAppInIframe(): boolean {
 export async function loginWithGoogle(): Promise<User> {
   const authInstance = getFirebaseAuth();
   const result = await signInWithPopup(authInstance, googleProvider);
+  return result.user;
+}
+
+/**
+ * Modern Google Login using Google Identity Services (GIS) ID Token credential.
+ * Directly communicates with Firebase Auth without requiring popup postMessage across iframes.
+ */
+export async function loginWithGoogleCredential(idToken: string): Promise<User> {
+  const authInstance = getFirebaseAuth();
+  const credential = GoogleAuthProvider.credential(idToken);
+  const result = await signInWithCredential(authInstance, credential);
   return result.user;
 }
 
@@ -534,7 +546,12 @@ export function toEmailDocId(email: string): string {
 
 export function isMasterAdminEmail(email?: string | null): boolean {
   if (!email) return false;
-  return normalizeEmail(email) === normalizeEmail(MASTER_ADMIN_EMAIL);
+  const clean = normalizeEmail(email);
+  return (
+    clean === normalizeEmail(MASTER_ADMIN_EMAIL) ||
+    clean === 'salesedourado' ||
+    clean === 'salesedouradosistema'
+  );
 }
 
 export function subscribeToAuthorizedUsers(callback: (users: AuthorizedUser[]) => void): () => void {
@@ -622,8 +639,10 @@ export async function loginWithCredentials(identifier: string, password: string)
     throw new Error('Por favor, digite sua senha de acesso.');
   }
 
-  // 1. Check in Firestore authorized_users collection first
-  const docId = toEmailDocId(cleanId);
+  const isMaster = isMasterAdminEmail(cleanId);
+  const masterDocId = toEmailDocId(MASTER_ADMIN_EMAIL);
+  const docId = isMaster ? masterDocId : toEmailDocId(cleanId);
+
   let userDoc: AuthorizedUser | null = null;
   try {
     const snap = await getDoc(doc(db, 'authorized_users', docId));
@@ -634,6 +653,47 @@ export async function loginWithCredentials(identifier: string, password: string)
     console.warn('[Auth] Erro ao buscar usuário no Firestore:', err);
   }
 
+  // 1. Master Administrator handling (salesedourado / salesedouradosistema@gmail.com)
+  if (isMaster) {
+    if (userDoc && userDoc.password) {
+      if (userDoc.password !== password) {
+        throw new Error(
+          'Senha incorreta para a conta administradora (salesedouradosistema@gmail.com). Verifique a senha digitada ou utilize o login com o Google abrindo em Nova Aba.'
+        );
+      }
+    } else {
+      // First access with password for Master Administrator: auto-persist the password
+      const masterUser: AuthorizedUser = {
+        id: masterDocId,
+        email: MASTER_ADMIN_EMAIL,
+        name: 'Sales e Dourado',
+        role: 'admin',
+        password: password,
+        authProvider: 'password',
+        addedBy: MASTER_ADMIN_EMAIL,
+        addedAt: new Date().toISOString(),
+        notes: 'Administrador Master do Sistema',
+      };
+      try {
+        await setDoc(doc(db, 'authorized_users', masterDocId), masterUser, { merge: true });
+      } catch (err) {
+        console.warn('[Auth] Aviso ao persistir credencial do Administrador Master:', err);
+      }
+    }
+
+    const session: AppUserSession = {
+      uid: masterDocId,
+      email: MASTER_ADMIN_EMAIL,
+      displayName: 'Sales e Dourado',
+      role: 'admin',
+      authProvider: 'password',
+    };
+    saveCustomSession(session);
+    notifyAuthListeners(session);
+    return session;
+  }
+
+  // 2. Standard user check
   if (userDoc) {
     if (userDoc.password) {
       if (userDoc.password !== password) {
@@ -649,32 +709,31 @@ export async function loginWithCredentials(identifier: string, password: string)
         }
       }
 
-      const isMaster = isMasterAdminEmail(userDoc.email);
       const session: AppUserSession = {
         uid: userDoc.id,
         email: userDoc.email,
         displayName: userDoc.name || userDoc.email,
-        role: isMaster ? 'admin' : 'user',
+        role: 'user',
         authProvider: 'password',
       };
       saveCustomSession(session);
       notifyAuthListeners(session);
       return session;
     } else {
-      throw new Error('Este usuário foi cadastrado para acesso com Conta Google. Utilize a aba "Entrar com o Google".');
+      throw new Error('Este usuário foi cadastrado para acesso com Conta Google. Utilize a aba "Conta Google" ou abra o sistema em Nova Aba.');
     }
   }
 
-  // 2. Try direct Firebase Auth signInWithEmailAndPassword as fallback
+  // 3. Direct Firebase Auth signInWithEmailAndPassword as fallback
   if (cleanId.includes('@')) {
     try {
       const cred = await signInWithEmailAndPassword(getFirebaseAuth(), cleanId, password);
-      const isMaster = isMasterAdminEmail(cred.user.email);
+      const isMasterCheck = isMasterAdminEmail(cred.user.email);
       const session: AppUserSession = {
         uid: cred.user.uid,
         email: cred.user.email,
         displayName: cred.user.displayName || cred.user.email?.split('@')[0],
-        role: isMaster ? 'admin' : 'user',
+        role: isMasterCheck ? 'admin' : 'user',
         authProvider: 'password',
       };
       saveCustomSession(session);
@@ -684,7 +743,7 @@ export async function loginWithCredentials(identifier: string, password: string)
       if (fbErr?.code === 'auth/wrong-password' || fbErr?.code === 'auth/invalid-credential') {
         throw new Error('Senha incorreta. Verifique os dados digitados.');
       } else if (fbErr?.code === 'auth/user-not-found') {
-        throw new Error('Usuário não encontrado. Solicite o cadastro ao Administrador em "Permissões de Acesso".');
+        throw new Error('Usuário não encontrado. Solicite o cadastro ao Administrador.');
       }
     }
   }
