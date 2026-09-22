@@ -25,6 +25,9 @@ import {
   onSnapshot,
   setDoc,
   deleteDoc,
+  query,
+  where,
+  getDocs,
   Firestore,
 } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
@@ -86,7 +89,21 @@ export function isAppInIframe(): boolean {
 export async function loginWithGoogle(): Promise<User> {
   const authInstance = getFirebaseAuth();
   const result = await signInWithPopup(authInstance, googleProvider);
-  return result.user;
+  const user = result.user;
+
+  // Strict Whitelist Check: verify if account is Master Admin or present in authorized_users
+  if (user.email && !isMasterAdminEmail(user.email)) {
+    const authStatus = await checkIfEmailIsAuthorized(user.email);
+    if (!authStatus.authorized) {
+      await signOut(authInstance);
+      clearCustomSession();
+      throw new Error(
+        `Acesso negado: a conta Google (${user.email}) não possui autorização ativa no sistema ou seu acesso foi revogado pelo Administrador.`
+      );
+    }
+  }
+
+  return user;
 }
 
 /**
@@ -97,7 +114,21 @@ export async function loginWithGoogleCredential(idToken: string): Promise<User> 
   const authInstance = getFirebaseAuth();
   const credential = GoogleAuthProvider.credential(idToken);
   const result = await signInWithCredential(authInstance, credential);
-  return result.user;
+  const user = result.user;
+
+  // Strict Whitelist Check: verify if account is Master Admin or present in authorized_users
+  if (user.email && !isMasterAdminEmail(user.email)) {
+    const authStatus = await checkIfEmailIsAuthorized(user.email);
+    if (!authStatus.authorized) {
+      await signOut(authInstance);
+      clearCustomSession();
+      throw new Error(
+        `Acesso negado: a conta Google (${user.email}) não possui autorização ativa no sistema ou seu acesso foi revogado pelo Administrador.`
+      );
+    }
+  }
+
+  return user;
 }
 
 /**
@@ -184,9 +215,25 @@ export function onAuthChange(callback: (user: AppUserSession | null) => void): (
   // Emit active session immediately
   callback(currentAppSession);
 
-  const unsubFirebase = onAuthStateChanged(getFirebaseAuth(), (firebaseUser) => {
+  const unsubFirebase = onAuthStateChanged(getFirebaseAuth(), async (firebaseUser) => {
     if (firebaseUser) {
-      const isMaster = isMasterAdminEmail(firebaseUser.email);
+      const email = firebaseUser.email || '';
+      const isMaster = isMasterAdminEmail(email);
+
+      // Verify if non-master user is authorized
+      if (!isMaster) {
+        const authStatus = await checkIfEmailIsAuthorized(email);
+        if (!authStatus.authorized) {
+          console.warn(`[Auth] Usuário não autorizado ou removido: ${email}. Encerrando sessão.`);
+          clearCustomSession();
+          try {
+            await signOut(getFirebaseAuth());
+          } catch {}
+          notifyAuthListeners(null);
+          return;
+        }
+      }
+
       const session: AppUserSession = {
         uid: firebaseUser.uid,
         email: firebaseUser.email,
@@ -724,49 +771,71 @@ export async function loginWithCredentials(identifier: string, password: string)
     }
   }
 
-  // 3. Direct Firebase Auth signInWithEmailAndPassword as fallback
-  if (cleanId.includes('@')) {
-    try {
-      const cred = await signInWithEmailAndPassword(getFirebaseAuth(), cleanId, password);
-      const isMasterCheck = isMasterAdminEmail(cred.user.email);
-      const session: AppUserSession = {
-        uid: cred.user.uid,
-        email: cred.user.email,
-        displayName: cred.user.displayName || cred.user.email?.split('@')[0],
-        role: isMasterCheck ? 'admin' : 'user',
-        authProvider: 'password',
-      };
-      saveCustomSession(session);
-      notifyAuthListeners(session);
-      return session;
-    } catch (fbErr: any) {
-      if (fbErr?.code === 'auth/wrong-password' || fbErr?.code === 'auth/invalid-credential') {
-        throw new Error('Senha incorreta. Verifique os dados digitados.');
-      } else if (fbErr?.code === 'auth/user-not-found') {
-        throw new Error('Usuário não encontrado. Solicite o cadastro ao Administrador.');
-      }
-    }
-  }
-
-  throw new Error('Usuário ou e-mail não encontrado no sistema. Solicite o cadastro ao Administrador.');
+  throw new Error('Usuário ou e-mail não encontrado na lista de acessos autorizados. Solicite o cadastro ao Administrador.');
 }
 
 export async function removeAuthorizedUser(docIdOrEmail: string): Promise<void> {
+  const cleanEmail = normalizeEmail(docIdOrEmail);
   const cleanId = docIdOrEmail.includes('@') ? toEmailDocId(docIdOrEmail) : docIdOrEmail;
-  await deleteDoc(doc(db, 'authorized_users', cleanId));
+
+  // 1. Delete standard doc ID
+  try {
+    await deleteDoc(doc(db, 'authorized_users', cleanId));
+  } catch (e) {
+    console.warn('[Firestore] Erro ao deletar docId:', e);
+  }
+
+  // 2. Delete raw email doc ID if distinct
+  if (cleanId !== cleanEmail) {
+    try {
+      await deleteDoc(doc(db, 'authorized_users', cleanEmail));
+    } catch {
+      // ignore
+    }
+  }
+
+  // 3. Query collection by email to wipe any duplicate or legacy entries
+  try {
+    const q = query(collection(db, 'authorized_users'), where('email', '==', cleanEmail));
+    const snap = await getDocs(q);
+    const deletePromises: Promise<void>[] = [];
+    snap.forEach((d) => {
+      deletePromises.push(deleteDoc(d.ref));
+    });
+    await Promise.all(deletePromises);
+  } catch (err) {
+    console.warn('[Firestore] Erro ao limpar docs por e-mail:', err);
+  }
 }
 
 export async function checkIfEmailIsAuthorized(email: string): Promise<{ authorized: boolean; role?: 'admin' | 'user' }> {
   const cleanEmail = normalizeEmail(email);
-  if (cleanEmail === normalizeEmail(MASTER_ADMIN_EMAIL)) {
+  if (isMasterAdminEmail(cleanEmail)) {
     return { authorized: true, role: 'admin' };
   }
   try {
     const docId = toEmailDocId(cleanEmail);
+    // 1. Check primary sanitized doc ID
     const snap = await getDoc(doc(db, 'authorized_users', docId));
     if (snap.exists()) {
       return { authorized: true, role: 'user' };
     }
+
+    // 2. Check raw email doc ID
+    if (docId !== cleanEmail) {
+      const snapRaw = await getDoc(doc(db, 'authorized_users', cleanEmail));
+      if (snapRaw.exists()) {
+        return { authorized: true, role: 'user' };
+      }
+    }
+
+    // 3. Query by email field
+    const q = query(collection(db, 'authorized_users'), where('email', '==', cleanEmail));
+    const querySnap = await getDocs(q);
+    if (!querySnap.empty) {
+      return { authorized: true, role: 'user' };
+    }
+
     return { authorized: false };
   } catch (error) {
     console.warn('[Firestore] Erro ao verificar autorização do e-mail:', error);

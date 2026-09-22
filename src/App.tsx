@@ -104,17 +104,25 @@ export default function App() {
         return;
       }
 
-      // Master admin or users authenticated via direct password credentials are authorized
-      if (isMasterAdminEmail(user.email) || user.authProvider === 'password') {
+      const cleanEmail = user.email.toLowerCase().trim();
+      const isMaster = isMasterAdminEmail(cleanEmail);
+
+      // ONLY master admin bypasses whitelist.
+      // Every other user (including previous password sessions) MUST be explicitly listed in authorized_users.
+      if (isMaster) {
         setIsAuthorized(true);
-        user.role = isMasterAdminEmail(user.email) ? 'admin' : 'user';
+        user.role = 'admin';
         setAuthLoading(false);
       } else {
         // Check whitelist
         try {
-          const authResult = await checkIfEmailIsAuthorized(user.email);
+          const authResult = await checkIfEmailIsAuthorized(cleanEmail);
           setIsAuthorized(authResult.authorized);
-          user.role = isMasterAdminEmail(user.email) ? 'admin' : 'user';
+          user.role = authResult.role || 'user';
+          if (!authResult.authorized) {
+            console.warn(`[Auth] Usuário não autorizado detectado: ${cleanEmail}. Encerrando sessão.`);
+            await logoutUser();
+          }
         } catch (err) {
           console.warn('[Auth] Erro ao verificar whitelist:', err);
           setIsAuthorized(false);
@@ -128,14 +136,19 @@ export default function App() {
         unsubWhitelist();
       }
       unsubWhitelist = subscribeToAuthorizedUsers((list) => {
-        const cleanEmail = user.email?.toLowerCase().trim() || '';
-        const match = list.find((item) => item.email.toLowerCase().trim() === cleanEmail);
-        const allowed =
-          isMasterAdminEmail(cleanEmail) ||
-          user.authProvider === 'password' ||
-          !!match;
-        setIsAuthorized(allowed);
-        user.role = isMasterAdminEmail(cleanEmail) ? 'admin' : 'user';
+        const emailNow = user.email?.toLowerCase().trim() || '';
+        const isMasterNow = isMasterAdminEmail(emailNow);
+        const match = list.find((item) => item.email.toLowerCase().trim() === emailNow);
+        const allowed = isMasterNow || !!match;
+
+        if (!allowed) {
+          console.warn(`[Auth] Acesso revogado em tempo real para: ${emailNow}`);
+          setIsAuthorized(false);
+          logoutUser();
+        } else {
+          setIsAuthorized(true);
+          user.role = isMasterNow ? 'admin' : (match?.role || 'user');
+        }
       });
     });
 
@@ -477,8 +490,11 @@ export default function App() {
       setIsAuthorized(true);
       return;
     }
-    const allowed = await checkIfEmailIsAuthorized(currentUser.email);
-    setIsAuthorized(allowed);
+    const authResult = await checkIfEmailIsAuthorized(currentUser.email);
+    setIsAuthorized(authResult.authorized);
+    if (!authResult.authorized) {
+      await logoutUser();
+    }
   };
 
   // 1. Loading Authentication State

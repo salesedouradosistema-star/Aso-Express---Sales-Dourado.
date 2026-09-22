@@ -207,7 +207,7 @@ export const AccessManagementModal: React.FC<AccessManagementModalProps> = ({
 
     setDeletingId(user.id);
     try {
-      await removeAuthorizedUser(user.id);
+      await removeAuthorizedUser(user.email || user.id);
       setSuccessMessage(`Acesso de ${user.email} revogado com sucesso.`);
       setTimeout(() => setSuccessMessage(null), 3000);
     } catch (err: any) {
