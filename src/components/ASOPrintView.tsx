@@ -10,6 +10,7 @@ import {
   AlertTriangle,
   FileCheck,
   FileText,
+  PlusCircle,
 } from 'lucide-react';
 import {
   getTimbradoConfig,
@@ -283,18 +284,18 @@ export const ASOPrintView: React.FC<ASOPrintViewProps> = ({
               <span className="font-bold">Função / Cargo:</span> <span className="font-bold">{aso.employee.role}</span>
             </div>
             <div className="col-span-5 mt-0.5">
-              <span className="font-bold">Setor:</span> <span className="font-bold">{aso.employee.department}</span>
+              <span className="font-bold">Setor:</span> <span className="font-bold">{aso.employee.department || 'Não informado'}</span>
             </div>
           </div>
         </div>
 
         {/* Section 3: Tipo de Exame Médico Ocupacional */}
-        <div className="border border-black p-1.5 mb-1.5 bg-slate-50/30">
-          <div className="text-[7.5pt] font-black uppercase tracking-wider text-slate-700 border-b border-slate-300 pb-0.5 mb-1">
-            3. NATUREZA DO EXAME MÉDICO OCUPACIONAL (NR-7)
+        <div className="border border-black p-2 mb-1.5 bg-slate-50/30">
+          <div className="text-[7.5pt] font-black uppercase tracking-wider text-slate-700 border-b border-slate-300 pb-0.5 mb-1 flex items-center justify-between">
+            <span className="truncate">3. NATUREZA DO EXAME MÉDICO OCUPACIONAL (NR-7)</span>
           </div>
 
-          <div className="grid grid-cols-5 gap-1 text-center text-[7.5pt]">
+          <div className="grid grid-cols-5 gap-1.5 text-center my-0.5">
             {[
               { id: 'admissional', name: 'ADMISSIONAL' },
               { id: 'periodico', name: 'PERIÓDICO' },
@@ -303,17 +304,22 @@ export const ASOPrintView: React.FC<ASOPrintViewProps> = ({
               { id: 'demissional', name: 'DEMISSIONAL' },
             ].map((t) => {
               const checked = aso.examType === t.id;
+              const isExamEmBranco = !aso.examType || aso.examType === 'em_branco';
               return (
                 <div
                   key={t.id}
-                  className={`py-1 px-0.5 border ${
+                  className={`flex items-center justify-center gap-1 py-1 px-1 border text-center select-none ${
                     checked
                       ? 'border-black bg-black text-white font-black'
-                      : 'border-slate-300 text-slate-500'
+                      : isExamEmBranco
+                      ? 'border-black bg-white text-black font-bold'
+                      : 'border-slate-300 text-slate-400 opacity-60 font-semibold'
                   }`}
                 >
-                  <span className="mr-0.5 font-mono font-bold">[{checked ? 'X' : ' '}]</span>
-                  <span>{t.name}</span>
+                  <span className="font-mono font-bold text-[7.5pt] shrink-0">[{checked ? 'X' : ' '}]</span>
+                  <span className="uppercase font-bold text-[6.5pt] tracking-tight whitespace-nowrap">
+                    {t.name}
+                  </span>
                 </div>
               );
             })}
@@ -349,9 +355,15 @@ export const ASOPrintView: React.FC<ASOPrintViewProps> = ({
               {aso.complementaryExams.map((ex, i) => (
                 <div key={i} className="flex items-start justify-between gap-2 border-b border-slate-100 pb-0.5 last:border-0">
                   <span className="font-medium text-slate-900 leading-snug break-words">{ex.name}</span>
-                  <span className="font-mono text-[7pt] text-slate-700 uppercase shrink-0 whitespace-nowrap text-right pt-0.5">
-                    {formatDateBR(ex.date)} ({ex.result})
-                  </span>
+                  {ex.result === 'em_branco' ? (
+                    <span className="font-mono text-[7pt] text-black shrink-0 whitespace-nowrap text-right pt-0.5 font-bold">
+                      Data: ____/____/________ &nbsp;[  ] Normal &nbsp;[  ] Alterado
+                    </span>
+                  ) : (
+                    <span className="font-mono text-[7pt] text-slate-700 uppercase shrink-0 whitespace-nowrap text-right pt-0.5">
+                      {formatDateBR(ex.date)} ({ex.result})
+                    </span>
+                  )}
                 </div>
               ))}
               {aso.complementaryExams.length === 0 && (
@@ -377,8 +389,8 @@ export const ASOPrintView: React.FC<ASOPrintViewProps> = ({
             </div>
 
             {/* Sinais Vitais & Biometria */}
-            <div className="grid grid-cols-12 gap-1 pb-1 mb-1 border-b border-slate-300 text-[7.5pt] items-center">
-              <div className="col-span-3">
+            <div className="grid grid-cols-4 gap-2 pb-1 mb-1 border-b border-slate-300 text-[7.5pt] items-center">
+              <div>
                 <span className="font-bold">PA:</span>{' '}
                 {aso.anamnesis.bloodPressure && !blankAnamnesisMode ? (
                   <span className="font-mono font-bold">{aso.anamnesis.bloodPressure} mmHg</span>
@@ -386,7 +398,7 @@ export const ASOPrintView: React.FC<ASOPrintViewProps> = ({
                   <span className="font-mono">____/____ mmHg</span>
                 )}
               </div>
-              <div className="col-span-2">
+              <div>
                 <span className="font-bold">FC:</span>{' '}
                 {aso.anamnesis.heartRate && !blankAnamnesisMode ? (
                   <span className="font-mono font-bold">{aso.anamnesis.heartRate} bpm</span>
@@ -394,31 +406,21 @@ export const ASOPrintView: React.FC<ASOPrintViewProps> = ({
                   <span className="font-mono">____ bpm</span>
                 )}
               </div>
-              <div className="col-span-3 flex flex-col justify-center leading-tight">
-                <div>
-                  <span className="font-bold">Peso:</span>{' '}
-                  {aso.anamnesis.weight && !blankAnamnesisMode ? (
-                    <span className="font-mono">{aso.anamnesis.weight} kg</span>
-                  ) : (
-                    <span className="font-mono">____ kg</span>
-                  )}
-                </div>
-                <div className="mt-0.5">
-                  <span className="font-bold">Altura:</span>{' '}
-                  {aso.anamnesis.height && !blankAnamnesisMode ? (
-                    <span className="font-mono">{aso.anamnesis.height} cm</span>
-                  ) : (
-                    <span className="font-mono">____ cm</span>
-                  )}
-                </div>
+              <div>
+                <span className="font-bold">Peso:</span>{' '}
+                {aso.anamnesis.weight && !blankAnamnesisMode ? (
+                  <span className="font-mono">{aso.anamnesis.weight} kg</span>
+                ) : (
+                  <span className="font-mono">____ kg</span>
+                )}
               </div>
-              <div className="col-span-4 flex flex-col justify-center leading-tight">
-                <div>
-                  <span className="font-bold">Estado Geral:</span>{' '}
-                  <span className="font-mono whitespace-nowrap text-[7pt]">
-                    [{!blankAnamnesisMode && aso.anamnesis.generalCondition === 'bom' ? 'X' : ' '}] Bom&nbsp;[{!blankAnamnesisMode && aso.anamnesis.generalCondition === 'regular' ? 'X' : ' '}] Reg&nbsp;[{!blankAnamnesisMode && aso.anamnesis.generalCondition === 'alterado' ? 'X' : ' '}] Alt
-                  </span>
-                </div>
+              <div>
+                <span className="font-bold">Altura:</span>{' '}
+                {aso.anamnesis.height && !blankAnamnesisMode ? (
+                  <span className="font-mono">{aso.anamnesis.height} cm</span>
+                ) : (
+                  <span className="font-mono">____ cm</span>
+                )}
               </div>
             </div>
 
@@ -466,16 +468,35 @@ export const ASOPrintView: React.FC<ASOPrintViewProps> = ({
 
               <div className="flex items-baseline gap-1.5 pt-0.5">
                 <span className="font-bold shrink-0 min-w-[130px]">Hábitos de Vida:</span>
-                {blankAnamnesisMode ? (
-                  <span className="font-mono text-[7pt]">
-                    Tabagismo: [ ] Sim  [ ] Não&nbsp;&nbsp;•&nbsp;&nbsp;Etilismo: [ ] Sim  [ ] Não
-                  </span>
-                ) : (
+                <span className="text-[7.5pt]">
+                  {/* Tabagismo */}
                   <span>
-                    Tabagismo: {aso.anamnesis.smoker ? `Sim (${aso.anamnesis.smokerDetails || 'ativo'})` : 'Não'} •{' '}
-                    Etilismo: {aso.anamnesis.alcohol ? `Sim (${aso.anamnesis.alcoholDetails || 'social'})` : 'Não'}
+                    Tabagismo:{' '}
+                    {aso.anamnesis.smokerStatus === 'em_branco' || (!aso.anamnesis.smokerStatus && aso.anamnesis.smoker === undefined) ? (
+                      <span className="font-mono text-[7pt] font-semibold">
+                        [&nbsp;&nbsp;] Sim&nbsp;&nbsp;[&nbsp;&nbsp;] Não
+                      </span>
+                    ) : aso.anamnesis.smokerStatus === 'sim' || aso.anamnesis.smoker ? (
+                      <span className="font-bold text-red-700">Sim {aso.anamnesis.smokerDetails ? `(${aso.anamnesis.smokerDetails})` : ''}</span>
+                    ) : (
+                      <span className="font-medium text-slate-800">Não</span>
+                    )}
                   </span>
-                )}
+                  &nbsp;&nbsp;•&nbsp;&nbsp;
+                  {/* Etilismo */}
+                  <span>
+                    Etilismo:{' '}
+                    {aso.anamnesis.alcoholStatus === 'em_branco' || (!aso.anamnesis.alcoholStatus && aso.anamnesis.alcohol === undefined) ? (
+                      <span className="font-mono text-[7pt] font-semibold">
+                        [&nbsp;&nbsp;] Sim&nbsp;&nbsp;[&nbsp;&nbsp;] Não
+                      </span>
+                    ) : aso.anamnesis.alcoholStatus === 'sim' || aso.anamnesis.alcohol ? (
+                      <span className="font-bold text-red-700">Sim {aso.anamnesis.alcoholDetails ? `(${aso.anamnesis.alcoholDetails})` : ''}</span>
+                    ) : (
+                      <span className="font-medium text-slate-800">Não</span>
+                    )}
+                  </span>
+                </span>
               </div>
             </div>
 
@@ -497,9 +518,11 @@ export const ASOPrintView: React.FC<ASOPrintViewProps> = ({
         <div className="border-2 border-black p-2 mb-1.5 bg-slate-50/40">
           <div className="text-[7.5pt] font-black uppercase tracking-wider text-slate-900 border-b border-black pb-0.5 mb-1 flex items-center justify-between gap-2">
             <span className="truncate">{conclusaoSectionNum}. CONCLUSÃO MÉDICA OCUPACIONAL (NR-7)</span>
-            <span className="text-[6.5pt] font-mono font-bold text-slate-600 uppercase shrink-0 whitespace-nowrap">
-              {isEmBranco ? 'PREENCHIMENTO MANUSCRITO NO PAPEL' : 'PARECER TÉCNICO CONCLUSIVO'}
-            </span>
+            {!isEmBranco && (
+              <span className="text-[6.5pt] font-mono font-bold text-slate-600 uppercase shrink-0 whitespace-nowrap">
+                PARECER TÉCNICO CONCLUSIVO
+              </span>
+            )}
           </div>
 
           {/* Três colunas uniformes com largura total (w-full) evitando quebra de linha */}
@@ -562,9 +585,8 @@ export const ASOPrintView: React.FC<ASOPrintViewProps> = ({
 
           {isEmBranco ? (
             <div className="mt-1 pt-1 border-t border-dashed border-black text-[7.5pt]">
-              <div className="flex justify-between items-center mb-0.5 text-[7pt] font-bold text-slate-800">
-                <span>RESTRIÇÕES / OBSERVAÇÕES CLÍNICAS OCUPACIONAIS (MANUSCRITO):</span>
-                <span className="text-[6.5pt] font-mono text-slate-500">(À caneta)</span>
+              <div className="mb-0.5 text-[7pt] font-bold text-slate-800">
+                <span>RESTRIÇÕES / OBSERVAÇÕES CLÍNICAS OCUPACIONAIS:</span>
               </div>
               <div className="space-y-1 pt-0.5">
                 <div className="border-b border-dotted border-black h-3 w-full" />
@@ -696,7 +718,12 @@ export const ASOPrintView: React.FC<ASOPrintViewProps> = ({
                   <span className="font-bold">Empresa:</span> {aso.company.name}
                 </div>
                 <div className="col-span-3 mt-0.5">
-                  <span className="font-bold">Tipo Exame:</span> {EXAM_TYPE_LABELS[aso.examType]?.label || aso.examType}
+                  <span className="font-bold">Tipo Exame:</span>{' '}
+                  {aso.examType && aso.examType !== 'em_branco' ? (
+                    <span>{EXAM_TYPE_LABELS[aso.examType]?.label || aso.examType}</span>
+                  ) : (
+                    <span className="font-mono font-normal">____________________</span>
+                  )}
                 </div>
                 <div className="col-span-3 mt-0.5">
                   <span className="font-bold">Data:</span> {formatDateBR(aso.issueDate)}
@@ -770,11 +797,22 @@ return (
       <div className="flex items-center gap-3">
         <button
           onClick={onBackToEdit}
-          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 transition-colors"
+          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 transition-colors cursor-pointer"
         >
           <ArrowLeft className="w-4 h-4" />
           Voltar ao Formulário
         </button>
+
+        {onNewAttendance && (
+          <button
+            onClick={onNewAttendance}
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-xs font-bold text-white transition-colors cursor-pointer shadow-md ring-1 ring-emerald-400/40"
+            title="Iniciar novo atendimento ocupacional"
+          >
+            <PlusCircle className="w-4 h-4 text-emerald-100" />
+            Novo Atendimento
+          </button>
+        )}
 
         <div>
           <span className="text-[10px] text-slate-400 block font-mono">

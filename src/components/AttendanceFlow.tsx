@@ -61,9 +61,12 @@ interface AttendanceFlowProps {
   onOpenSettings: (tab?: 'company' | 'doctor' | 'roles' | 'timbrado') => void;
   initialASOToEdit?: ASORecord | null;
   externalRoleTrigger?: { role: JobRoleTemplate; timestamp: number } | null;
+  onClearExternalRoleTrigger?: () => void;
   currentSelectedRoleId?: string;
   onRoleChangeInFlow?: (roleId: string) => void;
   newAttendanceTrigger?: number;
+  onResetForm?: () => void;
+  onQuickDemoFill?: () => void;
 }
 
 export const AttendanceFlow: React.FC<AttendanceFlowProps> = ({
@@ -74,50 +77,86 @@ export const AttendanceFlow: React.FC<AttendanceFlowProps> = ({
   onOpenSettings,
   initialASOToEdit,
   externalRoleTrigger,
+  onClearExternalRoleTrigger,
   currentSelectedRoleId,
   onRoleChangeInFlow,
   newAttendanceTrigger,
+  onResetForm,
+  onQuickDemoFill,
 }) => {
   // --- Step 1: Colaborador State ---
-  const [employee, setEmployee] = useState<Employee>({
-    name: '',
-    cpf: '',
-    rg: '',
-    birthDate: '',
-    age: undefined,
-    gender: 'M',
-    role: '',
-    department: '',
-    employeeCode: '',
+  const [employee, setEmployee] = useState<Employee>(() => {
+    if (initialASOToEdit?.employee) {
+      return { ...initialASOToEdit.employee };
+    }
+    return {
+      name: '',
+      cpf: '',
+      rg: '',
+      birthDate: '',
+      age: undefined,
+      gender: 'M',
+      role: '',
+      department: '',
+      employeeCode: '',
+    };
   });
 
   // --- Step 2: Tipo de Exame ---
-  const [examType, setExamType] = useState<ExamType>('em_branco');
+  const [examType, setExamType] = useState<ExamType>(() => {
+    return initialASOToEdit?.examType || 'em_branco';
+  });
 
   // --- Riscos Ocupacionais (NR-7) ---
-  const [risks, setRisks] = useState<OccupationalRisks>({ ...DEFAULT_RISKS });
+  const [risks, setRisks] = useState<OccupationalRisks>(() => {
+    if (initialASOToEdit?.risks) {
+      return {
+        ...initialASOToEdit.risks,
+        printAllOptionsForManualCheck: initialASOToEdit.risks.printAllOptionsForManualCheck ?? true,
+      };
+    }
+    return { ...DEFAULT_RISKS };
+  });
 
   // --- Step 3: Anamnese Dinâmica ---
-  const [anamnesis, setAnamnesis] = useState<Anamnesis>({ ...DEFAULT_ANAMNESIS });
+  const [anamnesis, setAnamnesis] = useState<Anamnesis>(() => {
+    return initialASOToEdit?.anamnesis ? { ...initialASOToEdit.anamnesis } : { ...DEFAULT_ANAMNESIS };
+  });
 
   // --- Tópicos de Perguntas Clínico-Ocupacionais (Opcional - entre Passo 3 e Passo 4) ---
-  const [questionnaireCategories, setQuestionnaireCategories] = useState<QuestionnaireCategory[]>(
-    getFreshQuestionnaireCategories
-  );
+  const [questionnaireCategories, setQuestionnaireCategories] = useState<QuestionnaireCategory[]>(() => {
+    if (initialASOToEdit?.questionnaire?.categories && initialASOToEdit.questionnaire.categories.length > 0) {
+      return JSON.parse(JSON.stringify(initialASOToEdit.questionnaire.categories));
+    }
+    return getFreshQuestionnaireCategories();
+  });
 
   // --- Complementary Exams ---
-  const [complementaryExams, setComplementaryExams] = useState<ComplementaryExam[]>([
-    { id: 'c1', name: 'Avaliação Clínica Ocupacional', date: new Date().toISOString().slice(0, 10), result: 'normal' },
-  ]);
+  const [complementaryExams, setComplementaryExams] = useState<ComplementaryExam[]>(() => {
+    if (initialASOToEdit?.complementaryExams && initialASOToEdit.complementaryExams.length > 0) {
+      return [...initialASOToEdit.complementaryExams];
+    }
+    return [
+      { id: 'c1', name: 'Avaliação Clínica Ocupacional', date: new Date().toISOString().slice(0, 10), result: 'em_branco' },
+    ];
+  });
 
   // --- Step 4: Conclusão Médica ---
-  const [fitness, setFitness] = useState<ExamFitness>('em_branco');
-  const [restrictionsNote, setRestrictionsNote] = useState('');
-  const [notes, setNotes] = useState('');
+  const [fitness, setFitness] = useState<ExamFitness>(() => {
+    return initialASOToEdit?.fitness || 'em_branco';
+  });
+  const [restrictionsNote, setRestrictionsNote] = useState<string>(() => {
+    return initialASOToEdit?.restrictionsNote || '';
+  });
+  const [notes, setNotes] = useState<string>(() => {
+    return initialASOToEdit?.notes || '';
+  });
 
   // --- Catálogo de Cargos e Funções pré-definidos (NR-7) ---
   const [savedRoles, setSavedRoles] = useState<JobRoleTemplate[]>(getSavedJobRoles);
-  const [selectedRoleId, setSelectedRoleId] = useState<string>('');
+  const [selectedRoleId, setSelectedRoleId] = useState<string>(() => {
+    return currentSelectedRoleId || '';
+  });
   const [roleFeedbackMsg, setRoleFeedbackMsg] = useState<string>('');
   const roleDropdownRef = useRef<HTMLDivElement>(null);
   const [isRoleDropdownOpen, setIsRoleDropdownOpen] = useState(false);
@@ -187,10 +226,7 @@ export const AttendanceFlow: React.FC<AttendanceFlowProps> = ({
       setEmployee((prev) => ({
         ...prev,
         role: shouldUpdateRoleText ? role.name : prev.role,
-        department:
-          prev.department && prev.department.trim() !== ''
-            ? prev.department
-            : role.department || '',
+        department: role.department || prev.department || '',
       }));
 
       // Apply pre-defined risks
@@ -204,19 +240,24 @@ export const AttendanceFlow: React.FC<AttendanceFlowProps> = ({
         setQuestionnaireCategories(JSON.parse(JSON.stringify(role.questionnaireCategories)));
       }
 
-      // Apply suggested complementary exams if present
+      // Apply suggested complementary exams if present (keeping clinical exam first and default to em_branco)
       if (role.complementaryExams && role.complementaryExams.length > 0) {
         setComplementaryExams((prev) => {
-          const existingNames = new Set(prev.map((e) => e.name.trim().toLowerCase()));
+          const clinicalExam = prev.find((e) => e.name.toLowerCase().includes('avaliação clínica')) || {
+            id: `c-base-${Date.now()}`,
+            name: 'Avaliação Clínica Ocupacional',
+            date: new Date().toISOString().slice(0, 10),
+            result: 'em_branco' as const,
+          };
           const newExams = role.complementaryExams!
-            .filter((examName) => !existingNames.has(examName.trim().toLowerCase()))
+            .filter((examName) => !examName.toLowerCase().includes('avaliação clínica'))
             .map((examName, idx) => ({
               id: `c-role-${Date.now()}-${idx}`,
               name: examName,
               date: new Date().toISOString().slice(0, 10),
-              result: 'normal' as const,
+              result: 'em_branco' as const,
             }));
-          return [...prev, ...newExams];
+          return [clinicalExam, ...newExams];
         });
       }
 
@@ -241,7 +282,7 @@ export const AttendanceFlow: React.FC<AttendanceFlowProps> = ({
         );
         setTimeout(() => {
           setRoleFeedbackMsg('');
-        }, 6000);
+        }, 5000);
       }
     },
     [onRoleChangeInFlow]
@@ -267,20 +308,21 @@ export const AttendanceFlow: React.FC<AttendanceFlowProps> = ({
   // Sync when role is pulled from external trigger (e.g. from header or initial selection)
   useEffect(() => {
     if (externalRoleTrigger?.role) {
-      applyJobRoleTemplate(externalRoleTrigger.role, { updateRoleText: true, showFeedback: true, notifyParent: false });
+      applyJobRoleTemplate(externalRoleTrigger.role, { updateRoleText: true, showFeedback: true, force: true, notifyParent: false });
+      onClearExternalRoleTrigger?.();
     }
-  }, [externalRoleTrigger, applyJobRoleTemplate]);
+  }, [externalRoleTrigger, applyJobRoleTemplate, onClearExternalRoleTrigger]);
 
   // Sync external role selection changes
   useEffect(() => {
-    if (currentSelectedRoleId !== undefined && currentSelectedRoleId !== selectedRoleId) {
+    if (currentSelectedRoleId && currentSelectedRoleId !== selectedRoleId) {
       setSelectedRoleId(currentSelectedRoleId);
       const found = savedRoles.find((r) => r.id === currentSelectedRoleId);
-      if (found && found.id !== appliedRoleTemplateId) {
-        applyJobRoleTemplate(found, { updateRoleText: true, showFeedback: true, notifyParent: false });
+      if (found) {
+        applyJobRoleTemplate(found, { updateRoleText: true, showFeedback: true, force: true, notifyParent: false });
       }
     }
-  }, [currentSelectedRoleId, selectedRoleId, savedRoles, appliedRoleTemplateId, applyJobRoleTemplate]);
+  }, [currentSelectedRoleId, selectedRoleId, savedRoles, applyJobRoleTemplate]);
 
   // Save current role, risks, and questionnaire as a new template in the catalog
   const saveCurrentAsJobRoleTemplate = () => {
@@ -308,9 +350,12 @@ export const AttendanceFlow: React.FC<AttendanceFlowProps> = ({
     }, 6000);
   };
 
-  // Pre-load if editing existing ASO
+  const lastASOIdRef = useRef<string | null>(initialASOToEdit?.id || null);
+
+  // Pre-load if editing existing ASO or changing demo
   useEffect(() => {
-    if (initialASOToEdit) {
+    if (initialASOToEdit && initialASOToEdit.id !== lastASOIdRef.current) {
+      lastASOIdRef.current = initialASOToEdit.id;
       setEmployee({ ...initialASOToEdit.employee });
       setExamType(initialASOToEdit.examType);
       setRisks({
@@ -319,7 +364,7 @@ export const AttendanceFlow: React.FC<AttendanceFlowProps> = ({
       });
       setAnamnesis({ ...initialASOToEdit.anamnesis });
       if (initialASOToEdit.questionnaire?.categories) {
-        setQuestionnaireCategories(initialASOToEdit.questionnaire.categories);
+        setQuestionnaireCategories(JSON.parse(JSON.stringify(initialASOToEdit.questionnaire.categories)));
       } else {
         setQuestionnaireCategories(getFreshQuestionnaireCategories());
       }
@@ -327,8 +372,20 @@ export const AttendanceFlow: React.FC<AttendanceFlowProps> = ({
       setFitness(initialASOToEdit.fitness);
       setRestrictionsNote(initialASOToEdit.restrictionsNote || '');
       setNotes(initialASOToEdit.notes || '');
+
+      // Synchronize matching role template
+      const matched = findMatchingRole(initialASOToEdit.employee.role);
+      if (matched) {
+        setAppliedRoleTemplateId(matched.id);
+        setSelectedRoleId(matched.id);
+      } else {
+        setAppliedRoleTemplateId(null);
+        setSelectedRoleId('');
+      }
+    } else if (!initialASOToEdit && lastASOIdRef.current) {
+      lastASOIdRef.current = null;
     }
-  }, [initialASOToEdit]);
+  }, [initialASOToEdit, findMatchingRole]);
 
   // Auto calculate age whenever birth date changes
   const handleBirthDateChange = (dateStr: string) => {
@@ -360,7 +417,9 @@ export const AttendanceFlow: React.FC<AttendanceFlowProps> = ({
       continuousMedication: 'Nega uso de medicação contínua.',
       previousSurgeries: 'Nega cirurgias ou internações prévias.',
       smoker: false,
+      smokerStatus: 'nao',
       alcohol: false,
+      alcoholStatus: 'nao',
       bloodPressure: '120/80',
       heartRate: '72',
       weight: anamnesis.weight || '72',
@@ -393,7 +452,9 @@ export const AttendanceFlow: React.FC<AttendanceFlowProps> = ({
       continuousMedication: '',
       previousSurgeries: '',
       smoker: false,
+      smokerStatus: 'em_branco',
       alcohol: false,
+      alcoholStatus: 'em_branco',
       bloodPressure: '',
       heartRate: '',
       weight: '',
@@ -401,6 +462,14 @@ export const AttendanceFlow: React.FC<AttendanceFlowProps> = ({
       imc: '',
       clinicalObservations: '',
     });
+
+    // Definir exames complementares como "Em branco/papel"
+    setComplementaryExams((prev) =>
+      prev.map((ex) => ({
+        ...ex,
+        result: 'em_branco',
+      }))
+    );
   };
 
   // Reset form for next employee while keeping Company and Doctor intact
@@ -421,21 +490,26 @@ export const AttendanceFlow: React.FC<AttendanceFlowProps> = ({
     setAnamnesis({ ...DEFAULT_ANAMNESIS });
     setQuestionnaireCategories(getFreshQuestionnaireCategories());
     setComplementaryExams([
-      { id: `c-${Date.now()}`, name: 'Avaliação Clínica Ocupacional', date: new Date().toISOString().slice(0, 10), result: 'normal' },
+      { id: `c-${Date.now()}`, name: 'Avaliação Clínica Ocupacional', date: new Date().toISOString().slice(0, 10), result: 'em_branco' },
     ]);
     setFitness('em_branco');
     setRestrictionsNote('');
     setNotes('');
     setSelectedRoleId('');
+    setAppliedRoleTemplateId(null);
     onRoleChangeInFlow?.('');
+    onResetForm?.();
     setRoleFeedbackMsg('');
     setValidationError('');
     window.scrollTo({ top: 0, behavior: 'smooth' });
-  }, [onRoleChangeInFlow]);
+  }, [onRoleChangeInFlow, onResetForm]);
+
+  const lastHandledNewAttendanceRef = useRef<number>(newAttendanceTrigger || 0);
 
   // When parent signals a New Attendance, reset all fields cleanly
   useEffect(() => {
-    if (newAttendanceTrigger) {
+    if (newAttendanceTrigger && newAttendanceTrigger !== lastHandledNewAttendanceRef.current) {
+      lastHandledNewAttendanceRef.current = newAttendanceTrigger;
       resetForm();
     }
   }, [newAttendanceTrigger, resetForm]);
@@ -548,10 +622,6 @@ export const AttendanceFlow: React.FC<AttendanceFlowProps> = ({
     }
     if (!employee.role.trim()) {
       setValidationError('Por favor, informe a Função/Cargo do colaborador.');
-      return;
-    }
-    if (!employee.department.trim()) {
-      setValidationError('Por favor, informe o Setor de trabalho.');
       return;
     }
     if (fitness === 'apto_com_restricoes' && !restrictionsNote.trim()) {
@@ -696,15 +766,28 @@ export const AttendanceFlow: React.FC<AttendanceFlowProps> = ({
               </p>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={resetForm}
-            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-100 text-slate-600 hover:text-slate-800 text-xs font-semibold transition-colors cursor-pointer"
-            title="Limpar todos os campos e iniciar novo atendimento em branco"
-          >
-            <RotateCcw className="w-3.5 h-3.5" />
-            Limpar Tela
-          </button>
+          <div className="flex items-center gap-2">
+            {onQuickDemoFill && (
+              <button
+                type="button"
+                onClick={onQuickDemoFill}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 text-xs font-semibold transition-colors cursor-pointer shadow-2xs"
+                title="Preencher com dados de exemplo rápido de colaborador e cargo"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-teal-600" />
+                Exemplo Rápido
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={resetForm}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-100 text-slate-600 hover:text-slate-800 text-xs font-semibold transition-colors cursor-pointer"
+              title="Limpar todos os campos e iniciar novo atendimento em branco"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              Limpar Tela
+            </button>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -823,10 +906,16 @@ export const AttendanceFlow: React.FC<AttendanceFlowProps> = ({
                 Função / Cargo *
               </label>
               {matchedRole && (
-                <span className="inline-flex items-center gap-1 text-[11px] text-teal-800 font-bold bg-teal-100/90 border border-teal-300 px-2 py-0.5 rounded-md shadow-2xs">
+                <button
+                  type="button"
+                  onClick={() => applyJobRoleTemplate(matchedRole, { updateRoleText: true, showFeedback: true, force: true })}
+                  className="inline-flex items-center gap-1 text-[11px] text-teal-800 font-bold bg-teal-100 hover:bg-teal-200 border border-teal-300 px-2 py-0.5 rounded-md shadow-2xs cursor-pointer transition-colors"
+                  title="Clique para recarregar riscos e questionário deste cargo"
+                >
                   <CheckCircle2 className="w-3 h-3 text-teal-600" />
-                  Cargo Pré-cadastrado
-                </span>
+                  <span>Cargo Pré-cadastrado</span>
+                  <span className="text-[10px] text-teal-700 underline ml-0.5 font-semibold">Recarregar</span>
+                </button>
               )}
             </div>
 
@@ -860,13 +949,16 @@ export const AttendanceFlow: React.FC<AttendanceFlowProps> = ({
                   }
                 }}
                 onBlur={() => {
-                  const matched = findMatchingRole(employee.role);
-                  if (matched) {
-                    setEmployee((prev) => ({ ...prev, role: matched.name }));
-                    if (matched.id !== appliedRoleTemplateId) {
-                      applyJobRoleTemplate(matched, { updateRoleText: true, showFeedback: true });
+                  setTimeout(() => {
+                    const matched = findMatchingRole(employee.role);
+                    if (matched) {
+                      setEmployee((prev) => ({ ...prev, role: matched.name }));
+                      if (matched.id !== appliedRoleTemplateId) {
+                        applyJobRoleTemplate(matched, { updateRoleText: true, showFeedback: true });
+                      }
                     }
-                  }
+                    setIsRoleDropdownOpen(false);
+                  }, 200);
                 }}
                 className={`w-full text-sm pl-3.5 pr-10 py-2.5 border rounded-xl focus:outline-hidden focus:ring-2 font-medium transition-all ${
                   matchedRole
@@ -906,7 +998,14 @@ export const AttendanceFlow: React.FC<AttendanceFlowProps> = ({
                           type="button"
                           onMouseDown={(e) => {
                             e.preventDefault();
-                            applyJobRoleTemplate(r, { updateRoleText: true, showFeedback: true });
+                            e.stopPropagation();
+                            applyJobRoleTemplate(r, { updateRoleText: true, showFeedback: true, force: true });
+                            setIsRoleDropdownOpen(false);
+                          }}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            applyJobRoleTemplate(r, { updateRoleText: true, showFeedback: true, force: true });
                             setIsRoleDropdownOpen(false);
                           }}
                           className={`w-full text-left px-3.5 py-2.5 hover:bg-teal-50 transition-colors flex items-center justify-between group cursor-pointer ${
@@ -977,15 +1076,15 @@ export const AttendanceFlow: React.FC<AttendanceFlowProps> = ({
           {/* Setor / Departamento */}
           <div>
             <label className="block text-xs font-bold text-slate-700 mb-1">
-              Setor / Departamento *
+              Setor / Departamento
             </label>
             <input
               type="text"
-              required
               value={employee.department}
               onChange={(e) =>
                 setEmployee({ ...employee, department: e.target.value })
               }
+              placeholder="Opcional (Ex: Produção, Administrativo...)"
               className="w-full text-sm px-3.5 py-2.5 border border-slate-300 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-teal-500 font-medium"
             />
           </div>
@@ -1560,30 +1659,140 @@ export const AttendanceFlow: React.FC<AttendanceFlowProps> = ({
           </div>
 
           {/* Tabagismo / Etilismo */}
-          <div className="flex items-center gap-6 pt-5">
-            <label className="flex items-center gap-2 text-xs font-semibold text-slate-700 dark:text-slate-300 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={anamnesis.smoker}
-                onChange={(e) =>
-                  setAnamnesis({ ...anamnesis, smoker: e.target.checked })
-                }
-                className="rounded text-teal-600 focus:ring-teal-500 h-4 w-4 bg-white dark:bg-slate-700 border-slate-300 dark:border-slate-600"
-              />
-              <span>Tabagista</span>
-            </label>
+          <div className="sm:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4 pt-3 pb-1">
+            {/* Tabagista */}
+            <div className="p-3 bg-slate-50 dark:bg-slate-800/80 rounded-xl border border-slate-200 dark:border-slate-700">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                  Tabagista
+                </span>
+                {(!anamnesis.smokerStatus || anamnesis.smokerStatus === 'em_branco') && (
+                  <span className="text-[10px] font-medium text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 rounded-full border border-amber-200 dark:border-amber-800">
+                    Assinatura / preenchimento no papel
+                  </span>
+                )}
+              </div>
+              <div className="grid grid-cols-3 gap-1.5">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setAnamnesis({
+                      ...anamnesis,
+                      smokerStatus: 'sim',
+                      smoker: true,
+                    })
+                  }
+                  className={`py-1.5 px-2 text-xs font-semibold rounded-lg border transition-all cursor-pointer text-center ${
+                    anamnesis.smokerStatus === 'sim' || (anamnesis.smoker && !anamnesis.smokerStatus)
+                      ? 'bg-red-600 text-white border-red-600 shadow-xs'
+                      : 'bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-600'
+                  }`}
+                >
+                  Sim
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setAnamnesis({
+                      ...anamnesis,
+                      smokerStatus: 'nao',
+                      smoker: false,
+                    })
+                  }
+                  className={`py-1.5 px-2 text-xs font-semibold rounded-lg border transition-all cursor-pointer text-center ${
+                    anamnesis.smokerStatus === 'nao' || (!anamnesis.smoker && anamnesis.smokerStatus === 'nao')
+                      ? 'bg-teal-600 text-white border-teal-600 shadow-xs'
+                      : 'bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-600'
+                  }`}
+                >
+                  Não
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setAnamnesis({
+                      ...anamnesis,
+                      smokerStatus: 'em_branco',
+                      smoker: false,
+                    })
+                  }
+                  className={`py-1.5 px-2 text-xs font-semibold rounded-lg border transition-all cursor-pointer text-center ${
+                    !anamnesis.smokerStatus || anamnesis.smokerStatus === 'em_branco'
+                      ? 'bg-amber-600 text-white border-amber-600 shadow-xs'
+                      : 'bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-600'
+                  }`}
+                >
+                  Em Branco
+                </button>
+              </div>
+            </div>
 
-            <label className="flex items-center gap-2 text-xs font-semibold text-slate-700 dark:text-slate-300 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={anamnesis.alcohol}
-                onChange={(e) =>
-                  setAnamnesis({ ...anamnesis, alcohol: e.target.checked })
-                }
-                className="rounded text-teal-600 focus:ring-teal-500 h-4 w-4 bg-white dark:bg-slate-700 border-slate-300 dark:border-slate-600"
-              />
-              <span>Etilista social</span>
-            </label>
+            {/* Etilista social */}
+            <div className="p-3 bg-slate-50 dark:bg-slate-800/80 rounded-xl border border-slate-200 dark:border-slate-700">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                  Etilista social
+                </span>
+                {(!anamnesis.alcoholStatus || anamnesis.alcoholStatus === 'em_branco') && (
+                  <span className="text-[10px] font-medium text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 rounded-full border border-amber-200 dark:border-amber-800">
+                    Assinatura / preenchimento no papel
+                  </span>
+                )}
+              </div>
+              <div className="grid grid-cols-3 gap-1.5">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setAnamnesis({
+                      ...anamnesis,
+                      alcoholStatus: 'sim',
+                      alcohol: true,
+                    })
+                  }
+                  className={`py-1.5 px-2 text-xs font-semibold rounded-lg border transition-all cursor-pointer text-center ${
+                    anamnesis.alcoholStatus === 'sim' || (anamnesis.alcohol && !anamnesis.alcoholStatus)
+                      ? 'bg-red-600 text-white border-red-600 shadow-xs'
+                      : 'bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-600'
+                  }`}
+                >
+                  Sim
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setAnamnesis({
+                      ...anamnesis,
+                      alcoholStatus: 'nao',
+                      alcohol: false,
+                    })
+                  }
+                  className={`py-1.5 px-2 text-xs font-semibold rounded-lg border transition-all cursor-pointer text-center ${
+                    anamnesis.alcoholStatus === 'nao' || (!anamnesis.alcohol && anamnesis.alcoholStatus === 'nao')
+                      ? 'bg-teal-600 text-white border-teal-600 shadow-xs'
+                      : 'bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-600'
+                  }`}
+                >
+                  Não
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setAnamnesis({
+                      ...anamnesis,
+                      alcoholStatus: 'em_branco',
+                      alcohol: false,
+                    })
+                  }
+                  className={`py-1.5 px-2 text-xs font-semibold rounded-lg border transition-all cursor-pointer text-center ${
+                    !anamnesis.alcoholStatus || anamnesis.alcoholStatus === 'em_branco'
+                      ? 'bg-amber-600 text-white border-amber-600 shadow-xs'
+                      : 'bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-600'
+                  }`}
+                >
+                  Em Branco
+                </button>
+              </div>
+            </div>
           </div>
 
           {/* Observações Clínicas Livres */}
@@ -1604,34 +1813,62 @@ export const AttendanceFlow: React.FC<AttendanceFlowProps> = ({
 
         {/* Exames Complementares Rápidos */}
         <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-700">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">
-              Procedimentos / Exames Complementares (NR-7)
-            </span>
-            <button
-              type="button"
-              onClick={() => {
-                setComplementaryExams([
-                  ...complementaryExams,
-                  {
-                    id: `ex-${Date.now()}`,
-                    name: 'Audiometria Ocupacional',
-                    date: new Date().toISOString().slice(0, 10),
-                    result: 'normal',
-                  },
-                ]);
-              }}
-              className="text-xs text-teal-600 dark:text-teal-400 hover:text-teal-700 dark:hover:text-teal-300 font-semibold cursor-pointer"
-            >
-              + Adicionar Exame
-            </button>
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">
+                Procedimentos / Exames Complementares (NR-7)
+              </span>
+              {complementaryExams.some((ex) => ex.result === 'em_branco') && (
+                <span className="text-[10px] font-medium text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 rounded-full border border-amber-200 dark:border-amber-800">
+                  Preenchimento no papel
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setComplementaryExams(
+                    complementaryExams.map((ex) => ({
+                      ...ex,
+                      result: 'em_branco',
+                    }))
+                  );
+                }}
+                className="text-xs text-amber-700 dark:text-amber-400 hover:text-amber-800 dark:hover:text-amber-300 font-semibold px-2 py-1 bg-amber-50 dark:bg-amber-950/40 rounded-md border border-amber-200 dark:border-amber-800 cursor-pointer"
+                title="Define todos os exames complementares para serem preenchidos à mão no papel"
+              >
+                ✎ Deixar em Branco / Papel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setComplementaryExams([
+                    ...complementaryExams,
+                    {
+                      id: `ex-${Date.now()}`,
+                      name: 'Audiometria Ocupacional',
+                      date: new Date().toISOString().slice(0, 10),
+                      result: 'em_branco',
+                    },
+                  ]);
+                }}
+                className="text-xs text-teal-600 dark:text-teal-400 hover:text-teal-700 dark:hover:text-teal-300 font-semibold cursor-pointer"
+              >
+                + Adicionar Exame
+              </button>
+            </div>
           </div>
 
           <div className="space-y-2">
             {complementaryExams.map((ex, idx) => (
               <div
                 key={ex.id}
-                className="flex flex-wrap items-center gap-2 bg-slate-50 dark:bg-slate-900/60 p-2 rounded-lg border border-slate-200 dark:border-slate-700 text-xs"
+                className={`flex flex-wrap items-center gap-2 p-2 rounded-lg border text-xs transition-colors ${
+                  ex.result === 'em_branco'
+                    ? 'bg-amber-50/60 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800/60'
+                    : 'bg-slate-50 dark:bg-slate-900/60 border-slate-200 dark:border-slate-700'
+                }`}
               >
                 <input
                   type="text"
@@ -1661,12 +1898,19 @@ export const AttendanceFlow: React.FC<AttendanceFlowProps> = ({
                     copy[idx].result = e.target.value as any;
                     setComplementaryExams(copy);
                   }}
-                  className="px-2 py-1 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded font-semibold text-slate-700 dark:text-slate-200"
+                  className={`px-2 py-1 rounded font-semibold text-xs border cursor-pointer ${
+                    ex.result === 'em_branco'
+                      ? 'bg-amber-100 text-amber-900 border-amber-300 dark:bg-amber-950 dark:text-amber-200 dark:border-amber-700'
+                      : ex.result === 'alterado'
+                      ? 'bg-red-100 text-red-900 border-red-300 dark:bg-red-950 dark:text-red-200 dark:border-red-700'
+                      : 'bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200'
+                  }`}
                 >
                   <option value="normal">Normal</option>
                   <option value="alterado">Alterado</option>
                   <option value="estavel">Alterado Estável</option>
                   <option value="pendente">Pendente</option>
+                  <option value="em_branco">Em Branco / Papel (Manual)</option>
                 </select>
                 {complementaryExams.length > 1 && (
                   <button

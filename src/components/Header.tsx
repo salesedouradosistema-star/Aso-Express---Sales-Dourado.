@@ -154,7 +154,7 @@ export const Header: React.FC<HeaderProps> = ({
               <div className="flex items-center gap-1.5">
                 <div
                   className="flex items-center gap-1.5 py-1 px-2 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 max-w-[150px] sm:max-w-[200px]"
-                  title={`Conectado como: ${currentUserEmail} ${isMasterAdmin ? '(Administrador Master)' : '(Usuário Autorizado)'}`}
+                  title={`Conectado como: ${currentUserEmail} ${isMasterAdmin ? '(Administrador)' : '(Usuário Padrão)'}`}
                 >
                   {currentUserPhoto ? (
                     <img
@@ -322,7 +322,7 @@ export const Header: React.FC<HeaderProps> = ({
               )}
 
               {/* 6. Exemplo Rápido */}
-              {activeTab === 'attendance' && onQuickDemoFill && (
+              {onQuickDemoFill && (
                 <button
                   type="button"
                   onClick={onQuickDemoFill}

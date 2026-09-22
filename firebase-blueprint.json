@@ -82,13 +82,15 @@
     },
     "authorized_user": {
       "title": "AuthorizedUser",
-      "description": "Lista de e-mails autorizados a acessar o sistema ASO Express",
+      "description": "Lista de usuários cadastrados e autorizados a acessar o sistema ASO Express (via Google ou login com senha direto)",
       "type": "object",
       "properties": {
         "id": { "type": "string", "description": "ID do registro (e-mail normalizado ou uuid)" },
-        "email": { "type": "string", "description": "Endereço de e-mail autorizado" },
+        "email": { "type": "string", "description": "Endereço de e-mail ou identificador de acesso autorizado" },
         "name": { "type": "string", "description": "Nome da pessoa autorizada" },
-        "role": { "type": "string", "description": "Nível de acesso (admin ou user)" },
+        "role": { "type": "string", "enum": ["admin", "user"], "description": "Nível de acesso (admin ou user)" },
+        "password": { "type": "string", "description": "Senha de acesso para login direto sem Google" },
+        "authProvider": { "type": "string", "enum": ["password", "google", "both"], "description": "Provedor de autenticação utilizado" },
         "addedBy": { "type": "string", "description": "E-mail de quem concedeu o acesso" },
         "addedAt": { "type": "string", "description": "Data de autorização ISO" },
         "notes": { "type": "string", "description": "Observações adicionais" }

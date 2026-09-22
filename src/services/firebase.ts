@@ -9,6 +9,8 @@ import {
   browserLocalPersistence,
   signOut,
   onAuthStateChanged,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
   User,
   Auth,
 } from 'firebase/auth';
@@ -25,7 +27,7 @@ import {
   Firestore,
 } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
-import { Company, Doctor, JobRoleTemplate, ASORecord, AuthorizedUser, MASTER_ADMIN_EMAIL } from '../types';
+import { Company, Doctor, JobRoleTemplate, ASORecord, AuthorizedUser, MASTER_ADMIN_EMAIL, AppUserSession } from '../types';
 
 // Initialize Firebase App
 export const app: FirebaseApp = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
@@ -111,12 +113,90 @@ export async function checkRedirectLogin(): Promise<User | null> {
   return null;
 }
 
-export async function logoutUser(): Promise<void> {
-  await signOut(getFirebaseAuth());
+const SESSION_STORAGE_KEY = 'aso_app_user_session_v2';
+
+export function getStoredUserSession(): AppUserSession | null {
+  try {
+    const raw = localStorage.getItem(SESSION_STORAGE_KEY);
+    if (raw) {
+      return JSON.parse(raw);
+    }
+  } catch (e) {
+    console.warn('[Auth] Erro ao recuperar sessão salva:', e);
+  }
+  return null;
 }
 
-export function onAuthChange(callback: (user: User | null) => void): () => void {
-  return onAuthStateChanged(getFirebaseAuth(), callback);
+export function saveCustomSession(session: AppUserSession): void {
+  try {
+    localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(session));
+  } catch (e) {
+    console.warn('[Auth] Erro ao salvar sessão:', e);
+  }
+}
+
+export function clearCustomSession(): void {
+  try {
+    localStorage.removeItem(SESSION_STORAGE_KEY);
+  } catch (e) {
+    console.warn('[Auth] Erro ao remover sessão:', e);
+  }
+}
+
+let authListeners: ((user: AppUserSession | null) => void)[] = [];
+let currentAppSession: AppUserSession | null = getStoredUserSession();
+
+function notifyAuthListeners(user: AppUserSession | null) {
+  currentAppSession = user;
+  authListeners.forEach((fn) => {
+    try {
+      fn(user);
+    } catch (e) {
+      console.warn('[Auth] Erro em listener de autenticação:', e);
+    }
+  });
+}
+
+export async function logoutUser(): Promise<void> {
+  clearCustomSession();
+  try {
+    await signOut(getFirebaseAuth());
+  } catch (e) {
+    console.warn('[Auth] Erro ao deslogar do Firebase Auth:', e);
+  }
+  notifyAuthListeners(null);
+}
+
+export function onAuthChange(callback: (user: AppUserSession | null) => void): () => void {
+  authListeners.push(callback);
+  // Emit active session immediately
+  callback(currentAppSession);
+
+  const unsubFirebase = onAuthStateChanged(getFirebaseAuth(), (firebaseUser) => {
+    if (firebaseUser) {
+      const isMaster = isMasterAdminEmail(firebaseUser.email);
+      const session: AppUserSession = {
+        uid: firebaseUser.uid,
+        email: firebaseUser.email,
+        displayName: firebaseUser.displayName || firebaseUser.email?.split('@')[0],
+        photoURL: firebaseUser.photoURL,
+        authProvider: 'google',
+        role: isMaster ? 'admin' : (currentAppSession?.role || 'user'),
+      };
+      saveCustomSession(session);
+      notifyAuthListeners(session);
+    } else {
+      // If no Firebase user and no custom session in localStorage
+      if (!getStoredUserSession()) {
+        notifyAuthListeners(null);
+      }
+    }
+  });
+
+  return () => {
+    authListeners = authListeners.filter((l) => l !== callback);
+    unsubFirebase();
+  };
 }
 
 // Initialize Firestore with specific database ID if configured and force long-polling
@@ -474,22 +554,41 @@ export function subscribeToAuthorizedUsers(callback: (users: AuthorizedUser[]) =
 }
 
 export async function addAuthorizedUser(
-  email: string,
+  emailOrUser: string,
   name?: string,
   notes?: string,
-  addedBy?: string
+  addedBy?: string,
+  role: 'admin' | 'user' = 'user',
+  password?: string,
+  authProvider: 'password' | 'google' = 'password'
 ): Promise<void> {
-  const cleanEmail = normalizeEmail(email);
-  if (!cleanEmail || !cleanEmail.includes('@')) {
-    throw new Error('E-mail inválido. Por favor, insira um e-mail válido.');
+  const cleanIdentifier = normalizeEmail(emailOrUser);
+  if (!cleanIdentifier) {
+    throw new Error('Identificador de acesso inválido. Por favor, insira um e-mail ou nome de usuário.');
   }
 
-  const docId = toEmailDocId(cleanEmail);
+  // If password provided and has email format, attempt secondary Firebase Auth registration in background
+  if (password && cleanIdentifier.includes('@')) {
+    try {
+      const secAppName = 'SecondaryAuthAdmin';
+      const secApp = getApps().find((a) => a.name === secAppName) || initializeApp(firebaseConfig, secAppName);
+      const secAuth = getAuth(secApp);
+      await createUserWithEmailAndPassword(secAuth, cleanIdentifier, password);
+      await signOut(secAuth);
+    } catch (err: any) {
+      console.log('[Auth] Criação no Firebase Auth secundário:', err?.code || err?.message);
+    }
+  }
+
+  const isMaster = isMasterAdminEmail(cleanIdentifier);
+  const docId = toEmailDocId(cleanIdentifier);
   const newUser: AuthorizedUser = {
     id: docId,
-    email: cleanEmail,
+    email: cleanIdentifier,
     name: name?.trim() || '',
-    role: 'user',
+    role: isMaster ? 'admin' : 'user', // strictly salesedourado is admin, all other accounts are user
+    password: password || '',
+    authProvider: authProvider || (password ? 'password' : 'google'),
     addedBy: addedBy ? normalizeEmail(addedBy) : MASTER_ADMIN_EMAIL,
     addedAt: new Date().toISOString(),
     notes: notes?.trim() || '',
@@ -498,23 +597,129 @@ export async function addAuthorizedUser(
   await setDoc(doc(db, 'authorized_users', docId), newUser);
 }
 
+export async function updateUserPassword(docIdOrEmail: string, newPassword: string): Promise<void> {
+  const cleanId = docIdOrEmail.includes('@') ? toEmailDocId(docIdOrEmail) : docIdOrEmail;
+  if (!newPassword || newPassword.trim().length < 6) {
+    throw new Error('A nova senha deve ter no mínimo 6 caracteres.');
+  }
+  await setDoc(
+    doc(db, 'authorized_users', cleanId),
+    {
+      password: newPassword.trim(),
+      authProvider: 'password',
+      updatedAt: new Date().toISOString(),
+    },
+    { merge: true }
+  );
+}
+
+export async function loginWithCredentials(identifier: string, password: string): Promise<AppUserSession> {
+  const cleanId = normalizeEmail(identifier);
+  if (!cleanId) {
+    throw new Error('Por favor, informe seu e-mail ou usuário de acesso.');
+  }
+  if (!password) {
+    throw new Error('Por favor, digite sua senha de acesso.');
+  }
+
+  // 1. Check in Firestore authorized_users collection first
+  const docId = toEmailDocId(cleanId);
+  let userDoc: AuthorizedUser | null = null;
+  try {
+    const snap = await getDoc(doc(db, 'authorized_users', docId));
+    if (snap.exists()) {
+      userDoc = snap.data() as AuthorizedUser;
+    }
+  } catch (err) {
+    console.warn('[Auth] Erro ao buscar usuário no Firestore:', err);
+  }
+
+  if (userDoc) {
+    if (userDoc.password) {
+      if (userDoc.password !== password) {
+        throw new Error('Senha incorreta. Verifique os dados digitados ou contate o administrador.');
+      }
+
+      // Try background Firebase Auth sign in if it's an email
+      if (cleanId.includes('@')) {
+        try {
+          await signInWithEmailAndPassword(getFirebaseAuth(), cleanId, password);
+        } catch {
+          // Handled via local session
+        }
+      }
+
+      const isMaster = isMasterAdminEmail(userDoc.email);
+      const session: AppUserSession = {
+        uid: userDoc.id,
+        email: userDoc.email,
+        displayName: userDoc.name || userDoc.email,
+        role: isMaster ? 'admin' : 'user',
+        authProvider: 'password',
+      };
+      saveCustomSession(session);
+      notifyAuthListeners(session);
+      return session;
+    } else {
+      throw new Error('Este usuário foi cadastrado para acesso com Conta Google. Utilize a aba "Entrar com o Google".');
+    }
+  }
+
+  // 2. Try direct Firebase Auth signInWithEmailAndPassword as fallback
+  if (cleanId.includes('@')) {
+    try {
+      const cred = await signInWithEmailAndPassword(getFirebaseAuth(), cleanId, password);
+      const isMaster = isMasterAdminEmail(cred.user.email);
+      const session: AppUserSession = {
+        uid: cred.user.uid,
+        email: cred.user.email,
+        displayName: cred.user.displayName || cred.user.email?.split('@')[0],
+        role: isMaster ? 'admin' : 'user',
+        authProvider: 'password',
+      };
+      saveCustomSession(session);
+      notifyAuthListeners(session);
+      return session;
+    } catch (fbErr: any) {
+      if (fbErr?.code === 'auth/wrong-password' || fbErr?.code === 'auth/invalid-credential') {
+        throw new Error('Senha incorreta. Verifique os dados digitados.');
+      } else if (fbErr?.code === 'auth/user-not-found') {
+        throw new Error('Usuário não encontrado. Solicite o cadastro ao Administrador em "Permissões de Acesso".');
+      }
+    }
+  }
+
+  throw new Error('Usuário ou e-mail não encontrado no sistema. Solicite o cadastro ao Administrador.');
+}
+
 export async function removeAuthorizedUser(docIdOrEmail: string): Promise<void> {
   const cleanId = docIdOrEmail.includes('@') ? toEmailDocId(docIdOrEmail) : docIdOrEmail;
   await deleteDoc(doc(db, 'authorized_users', cleanId));
 }
 
-export async function checkIfEmailIsAuthorized(email: string): Promise<boolean> {
+export async function checkIfEmailIsAuthorized(email: string): Promise<{ authorized: boolean; role?: 'admin' | 'user' }> {
   const cleanEmail = normalizeEmail(email);
   if (cleanEmail === normalizeEmail(MASTER_ADMIN_EMAIL)) {
-    return true;
+    return { authorized: true, role: 'admin' };
   }
   try {
     const docId = toEmailDocId(cleanEmail);
     const snap = await getDoc(doc(db, 'authorized_users', docId));
-    return snap.exists();
+    if (snap.exists()) {
+      return { authorized: true, role: 'user' };
+    }
+    return { authorized: false };
   } catch (error) {
     console.warn('[Firestore] Erro ao verificar autorização do e-mail:', error);
-    return false;
+    return { authorized: false };
   }
 }
+
+export function isUserAdmin(
+  email?: string | null
+): boolean {
+  if (!email) return false;
+  return isMasterAdminEmail(email);
+}
+
 

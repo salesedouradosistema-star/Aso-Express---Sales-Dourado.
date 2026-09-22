@@ -73,7 +73,11 @@ export interface Anamnesis {
   continuousMedication: string;
   previousSurgeries: string;
   smoker: boolean;
+  smokerStatus?: 'sim' | 'nao' | 'em_branco';
+  smokerDetails?: string;
   alcohol: boolean;
+  alcoholStatus?: 'sim' | 'nao' | 'em_branco';
+  alcoholDetails?: string;
   bloodPressure: string; // ex: 120x80
   heartRate: string; // ex: 76 bpm
   weight: string; // kg
@@ -86,7 +90,7 @@ export interface ComplementaryExam {
   id: string;
   name: string;
   date: string;
-  result: 'normal' | 'alterado' | 'estavel' | 'pendente';
+  result: 'normal' | 'alterado' | 'estavel' | 'pendente' | 'em_branco';
 }
 
 export interface Employee {
@@ -182,4 +186,15 @@ export interface AuthorizedUser {
   addedBy: string;
   addedAt: string;
   notes?: string;
+  password?: string;
+  authProvider?: 'password' | 'google' | 'both';
+}
+
+export interface AppUserSession {
+  uid: string;
+  email: string | null;
+  displayName?: string | null;
+  photoURL?: string | null;
+  role?: 'admin' | 'user';
+  authProvider?: 'password' | 'google';
 }

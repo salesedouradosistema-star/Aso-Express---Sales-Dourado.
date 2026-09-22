@@ -344,7 +344,7 @@ export function exportBatchCSV(): string {
     `"${item.employee.name.replace(/"/g, '""')}"`,
     `"${item.employee.cpf}"`,
     `"${item.employee.role.replace(/"/g, '""')}"`,
-    `"${item.employee.department.replace(/"/g, '""')}"`,
+    `"${(item.employee.department || '').replace(/"/g, '""')}"`,
     `"${item.examType.toUpperCase()}"`,
     `"${item.fitness === 'em_branco' ? 'EM BRANCO (PAPEL)' : item.fitness.toUpperCase()}"`,
     `"${item.doctor.name.replace(/"/g, '""')}"`,

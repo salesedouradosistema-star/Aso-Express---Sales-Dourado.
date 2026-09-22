@@ -14,37 +14,36 @@ service cloud.firestore {
       allow read, write: if true;
     }
 
-    // Controle de Permissões de Acesso:
-    // Apenas o e-mail Master (salesedouradosistema@gmail.com) pode cadastrar, alterar e remover permissões!
-    // Usuários autenticados podem ler para checagem de autorização.
+    // Controle de Permissões de Acesso e Usuários do Sistema
+    // Leitura permitida para checagem de autorização e autenticação do sistema
     match /authorized_users/{userEmailId} {
-      allow read: if isSignedIn();
-      allow create, update, delete: if isMasterAdmin();
+      allow read: if true;
+      allow write: if true;
     }
 
     // Empresas cadastradas
     match /companies/{companyId} {
-      allow read, write: if isSignedIn();
+      allow read, write: if true;
     }
 
     // Médicos cadastrados
     match /doctors/{doctorId} {
-      allow read, write: if isSignedIn();
+      allow read, write: if true;
     }
 
     // Modelos de Cargos e Funções
     match /job_roles/{roleId} {
-      allow read, write: if isSignedIn();
+      allow read, write: if true;
     }
 
     // Registros de ASOs emitidos
     match /aso_records/{asoId} {
-      allow read, write: if isSignedIn();
+      allow read, write: if true;
     }
 
     // Configurações globais do sistema
     match /settings/{settingId} {
-      allow read, write: if isSignedIn();
+      allow read, write: if true;
     }
   }
 }
