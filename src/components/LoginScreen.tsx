@@ -4,8 +4,6 @@ import {
   Lock,
   AlertCircle,
   Sparkles,
-  RefreshCw,
-  ArrowRight,
   Key,
   User,
   Eye,
@@ -14,7 +12,6 @@ import {
 } from 'lucide-react';
 import {
   loginWithGoogle,
-  loginWithGoogleRedirect,
   loginWithCredentials,
 } from '../services/firebase';
 
@@ -23,8 +20,8 @@ interface LoginScreenProps {
 }
 
 export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
-  // Tabs: 'credentials' (Login direto com senha - padrão recomendado) or 'google'
-  const [activeTab, setActiveTab] = useState<'credentials' | 'google'>('credentials');
+  // Tabs: 'google' (padrão) or 'credentials'
+  const [activeTab, setActiveTab] = useState<'credentials' | 'google'>('google');
 
   // Credentials form state
   const [identifier, setIdentifier] = useState('salesedourado');
@@ -34,8 +31,6 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
 
   // Google login state
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
-  const [isRedirecting, setIsRedirecting] = useState(false);
-  const [showRedirectOption, setShowRedirectOption] = useState<boolean>(false);
 
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -65,7 +60,6 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
   const handleGoogleLogin = async () => {
     setIsGoogleLoading(true);
     setErrorMessage(null);
-    setShowRedirectOption(false);
 
     try {
       await loginWithGoogle();
@@ -73,42 +67,32 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
         onLoginSuccess();
       }
     } catch (error: any) {
-      setShowRedirectOption(true);
-
       if (error?.code === 'auth/popup-closed-by-user' || error?.code === 'auth/cancelled-popup-request') {
         console.warn('[Auth] Janela popup do Google foi fechada antes de concluir.');
         setErrorMessage(
-          'A janela de autenticação do Google foi fechada antes de concluir (comum em navegadores rodando dentro de visualizações integradas). Utilize a aba "Login com Senha" para entrar diretamente.'
+          'A janela de autenticação do Google foi fechada antes de concluir.'
         );
       } else {
         console.warn('[Auth] Erro no login Google:', error?.message || error?.code || error);
         const errStr = String(error?.message || '') + ' ' + String(error?.code || '');
-        if (errStr.includes('origin_mismatch') || error?.code === 'auth/unauthorized-domain') {
+        if (errStr.includes('unauthorized-domain') || error?.code === 'auth/unauthorized-domain') {
           setErrorMessage(
-            'O domínio da nuvem ainda não está autorizado na lista de origens do Google Cloud Console (Erro 400: origin_mismatch). Utilize a aba "Login com Senha" para acessar imediatamente sem depender do Google OAuth.'
+            `O domínio "${window.location.hostname}" precisa ser autorizado no Console do Firebase (Authentication > Configurações > Domínios Autorizados).`
+          );
+        } else if (errStr.includes('origin_mismatch')) {
+          setErrorMessage(
+            `O domínio "${window.location.origin}" precisa ser incluído nas Origens JavaScript Autorizadas do Google Cloud Console.`
           );
         } else if (error?.code === 'auth/popup-blocked') {
           setErrorMessage(
-            'O navegador bloqueou a abertura do popup do Google. Utilize a aba "Login com Senha" para entrar sem bloqueios.'
+            'O navegador bloqueou a abertura da janela popup do Google. Permita popups para este site e tente novamente.'
           );
         } else {
-          setErrorMessage(error?.message || 'Falha ao autenticar com o Google. Recomendamos usar o Login com Senha.');
+          setErrorMessage(error?.message || 'Falha ao autenticar com o Google.');
         }
       }
     } finally {
       setIsGoogleLoading(false);
-    }
-  };
-
-  const handleRedirectLogin = async () => {
-    setIsRedirecting(true);
-    setErrorMessage(null);
-    try {
-      await loginWithGoogleRedirect();
-    } catch (err: any) {
-      console.warn('[Auth] Erro ao redirecionar para Google:', err?.message || err);
-      setErrorMessage(err?.message || 'Falha ao iniciar redirecionamento do Google.');
-      setIsRedirecting(false);
     }
   };
 
@@ -306,7 +290,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
               <button
                 type="button"
                 onClick={handleGoogleLogin}
-                disabled={isGoogleLoading || isRedirecting}
+                disabled={isGoogleLoading}
                 className="w-full flex items-center justify-center gap-3 px-4 py-3 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-800 font-semibold text-sm shadow-xs hover:shadow transition-all duration-150 disabled:opacity-60 cursor-pointer group"
               >
                 {isGoogleLoading ? (
@@ -338,41 +322,6 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
                   </>
                 )}
               </button>
-
-              {/* Direct Redirect Option (fallback) */}
-              {showRedirectOption && (
-                <button
-                  type="button"
-                  onClick={handleRedirectLogin}
-                  disabled={isRedirecting || isGoogleLoading}
-                  className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-teal-600 bg-teal-50 hover:bg-teal-100 text-teal-800 text-xs font-semibold shadow-xs transition-all cursor-pointer"
-                >
-                  {isRedirecting ? (
-                    <div className="flex items-center gap-2 text-teal-700">
-                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                      <span>Redirecionando para o Google...</span>
-                    </div>
-                  ) : (
-                    <>
-                      <ArrowRight className="w-3.5 h-3.5 text-teal-600" />
-                      <span>Tentar Login Direto (Sem Popup)</span>
-                    </>
-                  )}
-                </button>
-              )}
-
-              <div className="text-center pt-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setActiveTab('credentials');
-                    setErrorMessage(null);
-                  }}
-                  className="text-xs text-teal-700 hover:text-teal-800 font-semibold underline cursor-pointer"
-                >
-                  Prefere entrar direto? Use o Login com Senha
-                </button>
-              </div>
             </div>
           )}
 
